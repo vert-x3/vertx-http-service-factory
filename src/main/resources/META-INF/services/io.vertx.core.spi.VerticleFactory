@@ -1,0 +1,2 @@
+io.vertx.ext.httpservicefactory.HttpServiceFactory
+io.vertx.ext.httpservicefactory.HttpSecureServiceFactory
