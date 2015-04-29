@@ -20,6 +20,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.net.URLEncoder;
 import java.nio.file.Files;
+import java.util.Base64;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
@@ -27,8 +28,10 @@ import java.nio.file.Files;
 @RunWith(VertxUnitRunner.class)
 public class DeploymentTest {
 
+
   @Rule
   public TestName name = new TestName();
+  private final String auth = "Basic " + Base64.getEncoder().encodeToString("the_username:the_password".getBytes());
   private String cacheDir;
   private static Buffer verticleWithMain;
   private static Buffer verticle;
@@ -47,7 +50,18 @@ public class DeploymentTest {
   }
 
   private void configureServer(HttpServer server, Buffer verticle) {
+    configureServer(server, verticle, false);
+  }
+
+  private void configureServer(HttpServer server, Buffer verticle, boolean authenticated) {
     server.requestHandler(req -> {
+      if (authenticated && !auth.equals(req.getHeader("Authorization"))) {
+        req.response().
+            setStatusCode(401).
+            putHeader("WWW-Authenticate", "Basic realm=\"TheRealm\"").
+            end();
+        return;
+      }
       if (req.path().equals("/the_verticle.zip")) {
         req.response().
             putHeader("Content-Length", "" + verticle.length()).
@@ -119,6 +133,38 @@ public class DeploymentTest {
             context.assertTrue(ar.failed());
             context.assertTrue(ar.cause().getMessage().contains(msgMatch),
                 "Was expecting <" + ar.cause().getMessage() + "> to contain " + msgMatch);
+            async.complete();
+          });
+        })
+    );
+  }
+
+  @Test
+  public void testDeployFromAuthenticatedHttpServer(TestContext context) {
+    System.setProperty(HttpServiceFactory.AUTH_USERNAME_PROPERTY, "the_username");
+    System.setProperty(HttpServiceFactory.AUTH_PASSWORD_PROPERTY, "the_password");
+    vertx = Vertx.vertx();
+    HttpServer server = vertx.createHttpServer();
+    configureServer(server, verticleWithMain, true);
+    server.listen(
+        8080,
+        context.asyncAssertSuccess(s -> {
+          vertx.deployVerticle("http://localhost:8080/the_verticle.zip", context.asyncAssertSuccess());
+        })
+    );
+  }
+
+  @Test
+  public void testFailDeployFromAuthenticatedHttpServer(TestContext context) {
+    vertx = Vertx.vertx();
+    HttpServer server = vertx.createHttpServer();
+    configureServer(server, verticleWithMain, true);
+    Async async = context.async();
+    server.listen(
+        8080,
+        context.asyncAssertSuccess(s -> {
+          vertx.deployVerticle("http://localhost:8080/the_verticle.zip", ar -> {
+            context.assertTrue(ar.failed());
             async.complete();
           });
         })

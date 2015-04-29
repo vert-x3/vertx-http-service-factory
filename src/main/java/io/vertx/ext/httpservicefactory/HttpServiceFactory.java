@@ -16,6 +16,7 @@ import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URLEncoder;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.jar.Attributes;
 import java.util.jar.JarFile;
@@ -29,12 +30,16 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
   public static final String CACHE_DIR_PROPERTY = "vertx.httpServiceFactory.cacheDir";
   public static final String HTTP_CLIENT_OPTIONS_PROPERTY = "vertx.httpServiceFactory.httpClientOptions";
   public static final String HTTPS_CLIENT_OPTIONS_PROPERTY = "vertx.httpServiceFactory.httpsClientOptions";
+  public static final String AUTH_USERNAME_PROPERTY = "vertx.httpServiceFactory.authUsername";
+  public static final String AUTH_PASSWORD_PROPERTY = "vertx.httpServiceFactory.authPassword";
 
   private static final String FILE_SEP = System.getProperty("file.separator");
   private static final String FILE_CACHE_DIR = ".vertx" + FILE_SEP + "vertx-http-service-factory";
 
   private Vertx vertx;
   private File cacheDir;
+  private String username;
+  private String password;
   private HttpClientOptions options;
 
   @Override
@@ -43,6 +48,8 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
     cacheDir = new File(path);
     cacheDir.mkdirs();
     options = configOptions();
+    username = System.getProperty(AUTH_USERNAME_PROPERTY);
+    password = System.getProperty(AUTH_PASSWORD_PROPERTY);
     this.vertx = vertx;
   }
 
@@ -87,15 +94,33 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
       return;
     }
 
-    // Get file from remote server
     HttpClient client = vertx.createHttpClient(options);
+    doRequest(client, identifier, serviceName, deploymentOptions, classLoader, file, url, stringURL, false, resolution);
+  }
+
+  protected void doRequest(
+      HttpClient client,
+      String identifier,
+      String serviceName,
+      DeploymentOptions deploymentOptions,
+      ClassLoader classLoader,
+      File file,
+      URL url,
+      String stringURL,
+      boolean auth,
+      Future<String> resolution) {
+    // Get file from remote server
     HttpClientRequest req = client.get(url.getPort(), url.getHost(), url.getPath());
+    if (auth && username != null && password != null) {
+      req.putHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString((username + ":" + password).getBytes()));
+    }
     req.exceptionHandler(err -> {
       client.close();
       resolution.fail(err);
     });
     req.handler(resp -> {
-      if (resp.statusCode() == 200) {
+      int status = resp.statusCode();
+      if (status == 200) {
         String disposition = resp.getHeader("Content-Disposition");
         String contentType = resp.getHeader("Content-Type");
         String filename = null;
@@ -130,9 +155,22 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
             resolution.fail(ar.cause());
           }
         });
+      } else if (status == 401) {
+/*
+        // Auth
+        if (prefix().equals("https")) {
+          //
+        }
+*/
+        if (resp.getHeader("WWW-Authenticate") != null && username != null && password != null) {
+          doRequest(client, identifier, serviceName, deploymentOptions, classLoader, file, url, stringURL, true, resolution);
+          return;
+        }
+        client.close();
+        resolution.fail(new Exception("Unauthorized"));
       } else {
         client.close();
-        resolution.fail(new Exception("Cannot get file status:" + resp.statusCode()));
+        resolution.fail(new Exception("Cannot get file status:" + status));
       }
     });
     req.end();
