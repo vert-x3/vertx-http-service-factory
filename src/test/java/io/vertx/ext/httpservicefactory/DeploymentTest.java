@@ -140,38 +140,6 @@ public class DeploymentTest {
   }
 
   @Test
-  public void testDeployFromAuthenticatedHttpServer(TestContext context) {
-    System.setProperty(HttpServiceFactory.AUTH_USERNAME_PROPERTY, "the_username");
-    System.setProperty(HttpServiceFactory.AUTH_PASSWORD_PROPERTY, "the_password");
-    vertx = Vertx.vertx();
-    HttpServer server = vertx.createHttpServer();
-    configureServer(server, verticleWithMain, true);
-    server.listen(
-        8080,
-        context.asyncAssertSuccess(s -> {
-          vertx.deployVerticle("http://localhost:8080/the_verticle.zip", context.asyncAssertSuccess());
-        })
-    );
-  }
-
-  @Test
-  public void testFailDeployFromAuthenticatedHttpServer(TestContext context) {
-    vertx = Vertx.vertx();
-    HttpServer server = vertx.createHttpServer();
-    configureServer(server, verticleWithMain, true);
-    Async async = context.async();
-    server.listen(
-        8080,
-        context.asyncAssertSuccess(s -> {
-          vertx.deployVerticle("http://localhost:8080/the_verticle.zip", ar -> {
-            context.assertTrue(ar.failed());
-            async.complete();
-          });
-        })
-    );
-  }
-
-  @Test
   public void testDeployFromHttpSecureServerWithTrustAll(TestContext context) {
     System.setProperty(HttpServiceFactory.HTTPS_CLIENT_OPTIONS_PROPERTY, "{\"trustAll\":true}");
     testDeployFromHttpSecureServer(context);
@@ -199,6 +167,60 @@ public class DeploymentTest {
         8080,
         context.asyncAssertSuccess(s -> {
           vertx.deployVerticle("https://localhost:8080/the_verticle.zip", context.asyncAssertSuccess());
+        })
+    );
+  }
+
+  @Test
+  public void testDeployFromAuthenticatedServer(TestContext context) {
+    System.setProperty(HttpServiceFactory.AUTH_USERNAME_PROPERTY, "the_username");
+    System.setProperty(HttpServiceFactory.AUTH_PASSWORD_PROPERTY, "the_password");
+    vertx = Vertx.vertx();
+    HttpServer server = vertx.createHttpServer();
+    configureServer(server, verticleWithMain, true);
+    Async async = context.async();
+    server.listen(
+        8080,
+        context.asyncAssertSuccess(s -> {
+          vertx.deployVerticle("http://localhost:8080/the_verticle.zip", ar -> {
+            context.assertTrue(ar.failed());
+            async.complete();
+          });
+        })
+    );
+  }
+
+  @Test
+  public void testDeployFromAuthenticatedSecureServer(TestContext context) {
+    System.setProperty(HttpServiceFactory.AUTH_USERNAME_PROPERTY, "the_username");
+    System.setProperty(HttpServiceFactory.AUTH_PASSWORD_PROPERTY, "the_password");
+    System.setProperty(HttpServiceFactory.HTTPS_CLIENT_OPTIONS_PROPERTY, "{\"trustAll\":true}");
+    vertx = Vertx.vertx();
+    HttpServer server = vertx.createHttpServer(new HttpServerOptions().
+        setSsl(true).
+        setKeyStoreOptions(new JksOptions().setPath("src/test/resources/server-keystore.jks").setPassword("wibble")));
+    configureServer(server, verticleWithMain, true);
+    server.listen(
+        8080,
+        context.asyncAssertSuccess(s -> {
+          vertx.deployVerticle("https://localhost:8080/the_verticle.zip", context.asyncAssertSuccess());
+        })
+    );
+  }
+
+  @Test
+  public void testFailDeployFromAuthenticatedHttpServer(TestContext context) {
+    vertx = Vertx.vertx();
+    HttpServer server = vertx.createHttpServer();
+    configureServer(server, verticleWithMain, true);
+    Async async = context.async();
+    server.listen(
+        8080,
+        context.asyncAssertSuccess(s -> {
+          vertx.deployVerticle("http://localhost:8080/the_verticle.zip", ar -> {
+            context.assertTrue(ar.failed());
+            async.complete();
+          });
         })
     );
   }

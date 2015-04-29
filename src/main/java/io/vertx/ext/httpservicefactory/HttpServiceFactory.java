@@ -156,13 +156,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
           }
         });
       } else if (status == 401) {
-/*
-        // Auth
-        if (prefix().equals("https")) {
-          //
-        }
-*/
-        if (resp.getHeader("WWW-Authenticate") != null && username != null && password != null) {
+        if (prefix().equals("https") && resp.getHeader("WWW-Authenticate") != null && username != null && password != null) {
           doRequest(client, identifier, serviceName, deploymentOptions, classLoader, file, url, stringURL, true, resolution);
           return;
         }
