@@ -75,16 +75,16 @@ public class DeploymentTest {
   }
 
   @Test
-  public void testDeployFromHttpServerWithMain(TestContext context) {
-    testDeployFromHttpServer(context, "http://localhost:8080/the_verticle.zip", verticleWithMain);
+  public void testDeployFromServerWithMain(TestContext context) {
+    testDeployFromServer(context, "http://localhost:8080/the_verticle.zip", verticleWithMain);
   }
 
   @Test
-  public void testDeployFromHttpServerWithService(TestContext context) {
-    testDeployFromHttpServer(context, "http://localhost:8080/the_verticle.zip::main", verticle);
+  public void testDeployFromServerWithService(TestContext context) {
+    testDeployFromServer(context, "http://localhost:8080/the_verticle.zip::main", verticle);
   }
 
-  private void testDeployFromHttpServer(TestContext context, String url, Buffer verticle) {
+  private void testDeployFromServer(TestContext context, String url, Buffer verticle) {
     vertx = Vertx.vertx();
     HttpServer server = vertx.createHttpServer();
     configureServer(server, verticle);
@@ -140,19 +140,19 @@ public class DeploymentTest {
   }
 
   @Test
-  public void testDeployFromHttpSecureServerWithTrustAll(TestContext context) {
+  public void testDeployFromSecureServerWithTrustAll(TestContext context) {
     System.setProperty(HttpServiceFactory.HTTPS_CLIENT_OPTIONS_PROPERTY, "{\"trustAll\":true}");
-    testDeployFromHttpSecureServer(context);
+    testDeployFromSecureServer(context);
   }
 
   @Test
-  public void testDeployFromHttpSecureServerWithTrustStore(TestContext context) {
+  public void testDeployFromSecureServerWithTrustStore(TestContext context) {
     System.setProperty(HttpServiceFactory.HTTPS_CLIENT_OPTIONS_PROPERTY,
         "{\"trustStoreOptions\":{\"path\":\"src/test/resources/client-truststore.jks\",\"password\":\"wibble\"}}");
-    testDeployFromHttpSecureServer(context);
+    testDeployFromSecureServer(context);
   }
 
-  private void testDeployFromHttpSecureServer(TestContext context) {
+  private void testDeployFromSecureServer(TestContext context) {
     vertx = Vertx.vertx();
     HttpServer server = vertx.createHttpServer(new HttpServerOptions().
         setSsl(true).
@@ -209,7 +209,7 @@ public class DeploymentTest {
   }
 
   @Test
-  public void testFailDeployFromAuthenticatedHttpServer(TestContext context) {
+  public void testFailDeployFromAuthenticatedServer(TestContext context) {
     vertx = Vertx.vertx();
     HttpServer server = vertx.createHttpServer();
     configureServer(server, verticleWithMain, true);
