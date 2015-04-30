@@ -15,17 +15,29 @@ import java.nio.file.Files;
 public class SignatureTest {
 
   @Test
-  public void testVerify() throws Exception {
+  public void testVerifed() throws Exception {
     // Generate test-verticle.asc with
     // gpg -ab --output doc.asc --sign target/test-verticle.zip
-    File key = new File("src/test/resources/public.key");
+    verify("src/test/resources/validating_key.asc", true);
+  }
+
+  @Test
+  public void testNotVerifed() throws Exception {
+    verify("src/test/resources/another_key.asc", false);
+  }
+
+  private void verify(String keyPath, boolean expected) throws Exception {
+    File key = new File(keyPath);
     File file = new File("target/test-verticle.zip");
     File signature = new File("src/test/resources/test-verticle.asc");
     Assert.assertTrue(file.exists());
     Assert.assertTrue(signature.exists());
     PGPSignature pgpSignature = PGPHelper.getSignature(Files.readAllBytes(signature.toPath()));
     PGPPublicKey publicKey = PGPHelper.getPublicKey(Files.readAllBytes(key.toPath()), pgpSignature.getKeyID());
-    boolean verified = PGPHelper.verifySignature(new FileInputStream(file), new FileInputStream(signature), publicKey);
-    Assert.assertTrue(verified);
+    boolean verified = false;
+    if (publicKey != null) {
+      verified = PGPHelper.verifySignature(new FileInputStream(file), new FileInputStream(signature), publicKey);
+    }
+    Assert.assertEquals(expected, verified);
   }
 }

@@ -39,8 +39,8 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
   public static final String HTTPS_CLIENT_OPTIONS_PROPERTY = "vertx.httpServiceFactory.httpsClientOptions";
   public static final String AUTH_USERNAME_PROPERTY = "vertx.httpServiceFactory.authUsername";
   public static final String AUTH_PASSWORD_PROPERTY = "vertx.httpServiceFactory.authPassword";
-  public static final String KEYSERVER_HOST = "vertx.httpServiceFactory.keyserverHost";
-  public static final String KEYSERVER_PORT = "vertx.httpServiceFactory.keyserverPort";
+  public static final String KEYSERVER_URI_TEMPLATE = "vertx.httpServiceFactory.keyserverURITemplate";
+  public static final String VALIDATION_POLICY = "vertx.httpServiceFactory.validationPolicy";
 
   private static final String FILE_SEP = System.getProperty("file.separator");
   private static final String FILE_CACHE_DIR = ".vertx" + FILE_SEP + "vertx-http-service-factory";
@@ -49,8 +49,8 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
   private File cacheDir;
   private String username;
   private String password;
-  private String keyserverHost;
-  private int keyserverPort;
+  private String keyserverURITemplate;
+  private ValidationPolicy validationPolicy;
   private HttpClientOptions options;
 
   @Override
@@ -59,10 +59,10 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
     cacheDir = new File(path);
     cacheDir.mkdirs();
     options = configOptions();
+    validationPolicy = ValidationPolicy.valueOf(System.getProperty(VALIDATION_POLICY).toUpperCase());
     username = System.getProperty(AUTH_USERNAME_PROPERTY);
     password = System.getProperty(AUTH_PASSWORD_PROPERTY);
-    keyserverHost = System.getProperty(KEYSERVER_HOST); // pool.sks-keyservers.net
-    keyserverPort = System.getProperty(KEYSERVER_PORT) != null ? Integer.parseInt(System.getProperty(KEYSERVER_PORT)) : 11371;
+    keyserverURITemplate = System.getProperty(KEYSERVER_URI_TEMPLATE, "http://pool.sks-keyservers.net:11371/pks/lookup?op=get&options=mr&search=0x%016X");
     this.vertx = vertx;
   }
 
@@ -116,8 +116,8 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
           File publicKeyFile;
           try {
             signature = PGPHelper.getSignature(Files.readAllBytes(ar.result().signature.toPath()));
-            String requestURI = String.format("/pks/lookup?op=get&options=mr&search=0x%016X", signature.getKeyID());
-            publicKeyURI = new URI("http://" + keyserverHost + ":" + keyserverPort + requestURI);
+            String uri = String.format(keyserverURITemplate, signature.getKeyID());
+            publicKeyURI = new URI(uri);
             publicKeyFile = new File(cacheDir, URLEncoder.encode(publicKeyURI.toString(), "UTF-8"));
           } catch (Exception e) {
             client.close();
@@ -128,13 +128,15 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
             if (ar2.succeeded()) {
               try {
                 PGPPublicKey publicKey = PGPHelper.getPublicKey(Files.readAllBytes(ar2.result().toPath()), signature.getKeyID());
-                FileInputStream f = new FileInputStream(ar.result().deployment);
-                boolean verified = PGPHelper.verifySignature(f, new FileInputStream(ar.result().signature), publicKey);
-                if (verified) {
-                  deploy(deploymentFile, identifier, serviceName, deploymentOptions, classLoader, resolution);
-                } else {
-                  resolution.fail(new Exception("Signature verification failed"));
+                if (publicKey != null) {
+                  FileInputStream f = new FileInputStream(ar.result().deployment);
+                  boolean verified = PGPHelper.verifySignature(f, new FileInputStream(ar.result().signature), publicKey);
+                  if (verified) {
+                    deploy(deploymentFile, identifier, serviceName, deploymentOptions, classLoader, resolution);
+                    return;
+                  }
                 }
+                resolution.fail(new Exception("Signature verification failed"));
               } catch (Exception e) {
                 resolution.fail(e);
               } finally {
@@ -225,10 +227,16 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
     doRequest(client, file, url, username, password, false, ar1 -> {
       if (ar1.succeeded()) {
         // Now get the signature if any
-        if (keyserverHost != null) {
+        if (validationPolicy != ValidationPolicy.NEVER) {
           doRequest(client, signatureFile, signatureURL, username, password, false, ar3 -> {
             if (ar3.succeeded()) {
               handler.handle(Future.succeededFuture(new Result(ar1.result(), ar3.result())));
+            } else {
+              if (validationPolicy == ValidationPolicy.ALWAYS) {
+                handler.handle(Future.failedFuture(ar3.cause()));
+              } else {
+                handler.handle(Future.succeededFuture(new Result(ar1.result(), null)));
+              }
             }
           });
         } else {
