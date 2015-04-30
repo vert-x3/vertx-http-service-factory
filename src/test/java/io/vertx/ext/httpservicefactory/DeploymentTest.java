@@ -28,19 +28,22 @@ import java.util.Base64;
 @RunWith(VertxUnitRunner.class)
 public class DeploymentTest {
 
-
   @Rule
   public TestName name = new TestName();
   private final String auth = "Basic " + Base64.getEncoder().encodeToString("the_username:the_password".getBytes());
   private String cacheDir;
   private static Buffer verticleWithMain;
   private static Buffer verticle;
+  private static Buffer verticleSignature;
+  private static Buffer publicKey;
   private Vertx vertx;
 
   @BeforeClass
   public static void init() throws Exception {
     verticle = Buffer.buffer(Files.readAllBytes(new File("target/test-verticle.zip").toPath()));
     verticleWithMain = Buffer.buffer(Files.readAllBytes(new File("target/test-verticle-with-main.zip").toPath()));
+    verticleSignature = Buffer.buffer(Files.readAllBytes(new File("src/test/resources/test-verticle.asc").toPath()));
+    publicKey = Buffer.buffer(Files.readAllBytes(new File("src/test/resources/public.key").toPath()));
   }
 
   @Before
@@ -50,10 +53,10 @@ public class DeploymentTest {
   }
 
   private void configureServer(HttpServer server, Buffer verticle) {
-    configureServer(server, verticle, false);
+    configureServer(server, verticle, null, false);
   }
 
-  private void configureServer(HttpServer server, Buffer verticle, boolean authenticated) {
+  private void configureServer(HttpServer server, Buffer verticle, Buffer verticleSignature, boolean authenticated) {
     server.requestHandler(req -> {
       if (authenticated && !auth.equals(req.getHeader("Authorization"))) {
         req.response().
@@ -68,9 +71,16 @@ public class DeploymentTest {
             putHeader("Content-type", "application/octet-stream").
             write(verticle).
             end();
-      } else {
-        req.response().setStatusCode(404).end();
+        return;
+      } else if (req.path().equals("/the_verticle.zip.asc") && verticleSignature != null) {
+        req.response().
+            putHeader("Content-Length", "" + verticleSignature.length()).
+            putHeader("Content-type", "application/octet-stream").
+            write(verticleSignature).
+            end();
+        return;
       }
+      req.response().setStatusCode(404).end();
     });
   }
 
@@ -113,7 +123,7 @@ public class DeploymentTest {
 
   @Test
   public void testFailDeployMalformedURL(TestContext context) {
-    testFailDeploy(context, "http://localhost:foo/the_verticle.zip", "For input string");
+    testFailDeploy(context, "http://localhost:0/the_verticle.zip", "Can't assign requested address");
   }
 
   @Test
@@ -177,7 +187,7 @@ public class DeploymentTest {
     System.setProperty(HttpServiceFactory.AUTH_PASSWORD_PROPERTY, "the_password");
     vertx = Vertx.vertx();
     HttpServer server = vertx.createHttpServer();
-    configureServer(server, verticleWithMain, true);
+    configureServer(server, verticleWithMain, null, true);
     Async async = context.async();
     server.listen(
         8080,
@@ -199,7 +209,7 @@ public class DeploymentTest {
     HttpServer server = vertx.createHttpServer(new HttpServerOptions().
         setSsl(true).
         setKeyStoreOptions(new JksOptions().setPath("src/test/resources/server-keystore.jks").setPassword("wibble")));
-    configureServer(server, verticleWithMain, true);
+    configureServer(server, verticleWithMain, null, true);
     server.listen(
         8080,
         context.asyncAssertSuccess(s -> {
@@ -212,7 +222,7 @@ public class DeploymentTest {
   public void testFailDeployFromAuthenticatedServer(TestContext context) {
     vertx = Vertx.vertx();
     HttpServer server = vertx.createHttpServer();
-    configureServer(server, verticleWithMain, true);
+    configureServer(server, verticleWithMain, null, true);
     Async async = context.async();
     server.listen(
         8080,
@@ -238,11 +248,39 @@ public class DeploymentTest {
     vertx.deployVerticle("http://localhost:8080/the_verticle.zip", context.asyncAssertSuccess());
   }
 
+  @Test
+  public void testDeploySigned(TestContext context) throws Exception {
+    System.setProperty(HttpServiceFactory.KEYSERVER_HOST, "localhost");
+    System.setProperty(HttpServiceFactory.KEYSERVER_PORT, "8081");
+    vertx = Vertx.vertx();
+    HttpServer server = vertx.createHttpServer();
+    HttpServer keyServer = vertx.createHttpServer();
+    keyServer.requestHandler(req -> {
+      if (req.path().equals("/pks/lookup") &&
+          "get".equals(req.getParam("op")) &&
+          "mr".equals(req.getParam("options")) &&
+          "0x9F9358A769793D09".equals(req.getParam("search"))) {
+        req.response().setChunked(true).setStatusCode(200).write(publicKey).end();
+      } else {
+        req.response().setStatusCode(404).end();
+      }
+    });
+    configureServer(server, verticle, verticleSignature, false);
+    server.listen(8080, context.asyncAssertSuccess(s ->
+        keyServer.listen(8081, context.asyncAssertSuccess(ss ->vertx.
+          deployVerticle("http://localhost:8080/the_verticle.zip::main", context.asyncAssertSuccess(id -> {})))
+    )));
+  }
+
   @After
   public void after(TestContext context) {
     System.clearProperty(HttpServiceFactory.HTTPS_CLIENT_OPTIONS_PROPERTY);
     System.clearProperty(HttpServiceFactory.HTTP_CLIENT_OPTIONS_PROPERTY);
     System.clearProperty(HttpServiceFactory.CACHE_DIR_PROPERTY);
+    System.clearProperty(HttpServiceFactory.KEYSERVER_HOST);
+    System.clearProperty(HttpServiceFactory.KEYSERVER_PORT);
+    System.clearProperty(HttpServiceFactory.AUTH_PASSWORD_PROPERTY);
+    System.clearProperty(HttpServiceFactory.AUTH_USERNAME_PROPERTY);
     if (vertx != null) {
       vertx.close(context.asyncAssertSuccess());
     }

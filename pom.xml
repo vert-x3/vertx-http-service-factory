@@ -56,6 +56,11 @@
       <groupId>io.vertx</groupId>
       <artifactId>vertx-service-factory</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcpg-jdk15on</artifactId>
+      <version>1.52</version>
+    </dependency>
 
     <dependency>
       <groupId>io.vertx</groupId>
