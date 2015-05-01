@@ -22,7 +22,6 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.net.URLEncoder;
 import java.nio.file.Files;
-import java.security.PublicKey;
 import java.util.Base64;
 
 /**
@@ -58,34 +57,6 @@ public class DeploymentTest {
     System.setProperty(HttpServiceFactory.VALIDATION_POLICY, "" + ValidationPolicy.NEVER);
   }
 
-  private Handler<HttpServerRequest> repoHandler(Buffer verticle, Buffer verticleSignature, boolean authenticated) {
-    return req -> {
-      if (authenticated && !auth.equals(req.getHeader("Authorization"))) {
-        req.response().
-            setStatusCode(401).
-            putHeader("WWW-Authenticate", "Basic realm=\"TheRealm\"").
-            end();
-        return;
-      }
-      if (req.path().equals("/the_verticle.zip")) {
-        req.response().
-            putHeader("Content-Length", "" + verticle.length()).
-            putHeader("Content-type", "application/octet-stream").
-            write(verticle).
-            end();
-        return;
-      } else if (req.path().equals("/the_verticle.zip.asc") && verticleSignature != null) {
-        req.response().
-            putHeader("Content-Length", "" + verticleSignature.length()).
-            putHeader("Content-type", "application/octet-stream").
-            write(verticleSignature).
-            end();
-        return;
-      }
-      req.response().setStatusCode(404).end();
-    };
-  }
-
   @Test
   public void testDeployFromServerWithMain(TestContext context) {
     testDeployFromServer(context, "http://localhost:8080/the_verticle.zip", verticleWithMain);
@@ -98,7 +69,7 @@ public class DeploymentTest {
 
   private void testDeployFromServer(TestContext context, String url, Buffer verticle) {
     vertx = Vertx.vertx();
-    HttpServer server = vertx.createHttpServer().requestHandler(repoHandler(verticle, null, false));
+    HttpServer server = new RepoBuilder().setVerticle(verticle).build();
     Async async = context.async();
     vertx.eventBus().consumer("the_test", msg -> {
       context.assertEquals("pass", msg.body());
@@ -134,7 +105,7 @@ public class DeploymentTest {
 
   private void testFailDeploy(TestContext context, String url, String msgMatch) {
     vertx = Vertx.vertx();
-    HttpServer server = vertx.createHttpServer().requestHandler(repoHandler(verticle, null, false));
+    HttpServer server = new RepoBuilder().setVerticle(verticle).build();
     Async async = context.async();
     server.listen(
         8080,
@@ -164,10 +135,7 @@ public class DeploymentTest {
 
   private void testDeployFromSecureServer(TestContext context) {
     vertx = Vertx.vertx();
-    HttpServer server = vertx.createHttpServer(new HttpServerOptions().
-        setSsl(true).
-        setKeyStoreOptions(new JksOptions().setPath("src/test/resources/server-keystore.jks").setPassword("wibble"))).
-        requestHandler(repoHandler(verticleWithMain, null, false));
+    HttpServer server = new RepoBuilder().setSecure(true).setVerticle(verticleWithMain).build();
     Async async = context.async();
     vertx.eventBus().consumer("the_test", msg -> {
       context.assertEquals("pass", msg.body());
@@ -186,7 +154,7 @@ public class DeploymentTest {
     System.setProperty(HttpServiceFactory.AUTH_USERNAME_PROPERTY, "the_username");
     System.setProperty(HttpServiceFactory.AUTH_PASSWORD_PROPERTY, "the_password");
     vertx = Vertx.vertx();
-    HttpServer server = vertx.createHttpServer().requestHandler(repoHandler(verticleWithMain, null, true));
+    HttpServer server = new RepoBuilder().setVerticle(verticleWithMain).setAuthenticated(true).build();
     Async async = context.async();
     server.listen(
         8080,
@@ -205,10 +173,7 @@ public class DeploymentTest {
     System.setProperty(HttpServiceFactory.AUTH_PASSWORD_PROPERTY, "the_password");
     System.setProperty(HttpServiceFactory.HTTPS_CLIENT_OPTIONS_PROPERTY, "{\"trustAll\":true}");
     vertx = Vertx.vertx();
-    HttpServer server = vertx.createHttpServer(new HttpServerOptions().
-        setSsl(true).
-        setKeyStoreOptions(new JksOptions().setPath("src/test/resources/server-keystore.jks").setPassword("wibble"))).
-        requestHandler(repoHandler(verticleWithMain, null, true));
+    HttpServer server = new RepoBuilder().setVerticle(verticleWithMain).setSecure(true).setAuthenticated(true).build();
     server.listen(
         8080,
         context.asyncAssertSuccess(s -> {
@@ -220,7 +185,7 @@ public class DeploymentTest {
   @Test
   public void testFailDeployFromAuthenticatedServer(TestContext context) {
     vertx = Vertx.vertx();
-    HttpServer server = vertx.createHttpServer().requestHandler(repoHandler(verticleWithMain, null, true));
+    HttpServer server = new RepoBuilder().setVerticle(verticleWithMain).setAuthenticated(true).build();
     Async async = context.async();
     server.listen(
         8080,
@@ -246,91 +211,120 @@ public class DeploymentTest {
     vertx.deployVerticle("http://localhost:8080/the_verticle.zip", context.asyncAssertSuccess());
   }
 
-  private static Handler<HttpServerRequest> keyHandler(Buffer key) {
-    return req -> {
-      if (req.path().equals("/pks/lookup") &&
-          "get".equals(req.getParam("op")) &&
-          "mr".equals(req.getParam("options")) &&
-          "0x9F9358A769793D09".equals(req.getParam("search"))) {
-        req.response().setChunked(true).setStatusCode(200).write(key).end();
-      } else {
-        req.response().setStatusCode(404).end();
-      }
-    };
-  }
-
   @Test
   public void testSignedValidationAlwaysDeploys(TestContext context) throws Exception {
-    testValidateDeployment(context, ValidationPolicy.ALWAYS, repoHandler(verticle, verticleSignature, false), keyHandler(validatingKey));
+    testValidateDeployment(
+        context,
+        ValidationPolicy.ALWAYS,
+        new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
+        new KeyServerBuilder().setKey(validatingKey));
   }
 
   @Test
   public void testSignedValidationVerifyDeploys(TestContext context) throws Exception {
-    testValidateDeployment(context, ValidationPolicy.VERIFY, repoHandler(verticle, verticleSignature, false), keyHandler(validatingKey));
+    testValidateDeployment(
+        context,
+        ValidationPolicy.VERIFY,
+        new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
+        new KeyServerBuilder().setKey(validatingKey));
   }
 
   @Test
   public void testSignedValidationNeverDeploys(TestContext context) throws Exception {
-    testValidateDeployment(context, ValidationPolicy.NEVER, repoHandler(verticle, verticleSignature, false), keyHandler(validatingKey));
+    testValidateDeployment(
+        context,
+        ValidationPolicy.NEVER,
+        new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
+        new KeyServerBuilder().setKey(validatingKey));
   }
 
   @Test
   public void testSignedMissingSignatureValidationAlwaysFails(TestContext context) throws Exception {
-    testValidationDeploymentFailed(context, ValidationPolicy.ALWAYS, repoHandler(verticle, null, false), keyHandler(validatingKey));
+    testValidationDeploymentFailed(context, ValidationPolicy.ALWAYS, new RepoBuilder().setVerticle(verticle), new KeyServerBuilder().setKey(validatingKey));
   }
 
   @Test
   public void testSignedMissingSignatureValidationVerifyDeploys(TestContext context) throws Exception {
-    testValidateDeployment(context, ValidationPolicy.VERIFY, repoHandler(verticle, null, false), keyHandler(validatingKey));
+    testValidateDeployment(
+        context,
+        ValidationPolicy.VERIFY,
+        new RepoBuilder().setVerticle(verticle),
+        new KeyServerBuilder().setKey(validatingKey));
   }
 
   @Test
   public void testSignedMissingSignatureValidationNeverDeploys(TestContext context) throws Exception {
-    testValidateDeployment(context, ValidationPolicy.NEVER, repoHandler(verticle, null, false), keyHandler(validatingKey));
+    testValidateDeployment(
+        context,
+        ValidationPolicy.NEVER,
+        new RepoBuilder().setVerticle(verticle),
+        new KeyServerBuilder().setKey(validatingKey));
   }
 
   @Test
   public void testSignedMissingPublicKeyValidationAlwaysFails(TestContext context) throws Exception {
-    testValidationDeploymentFailed(context, ValidationPolicy.ALWAYS, repoHandler(verticle, verticleSignature, false), req -> req.response().setStatusCode(404).end());
+    testValidationDeploymentFailed(
+        context,
+        ValidationPolicy.ALWAYS,
+        new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
+        new KeyServerBuilder());
   }
 
   @Test
   public void testSignedMissingPublicKeyValidationVerifyFails(TestContext context) throws Exception {
-    testValidationDeploymentFailed(context, ValidationPolicy.VERIFY, repoHandler(verticle, verticleSignature, false), req -> req.response().setStatusCode(404).end());
+    testValidationDeploymentFailed(
+        context,
+        ValidationPolicy.VERIFY,
+        new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
+        new KeyServerBuilder());
   }
 
   @Test
   public void testSignedMissingPublicKeyValidationNeverDeploys(TestContext context) throws Exception {
-    testValidateDeployment(context, ValidationPolicy.NEVER, repoHandler(verticle, verticleSignature, false), req -> req.response().setStatusCode(404).end());
+    testValidateDeployment(
+        context,
+        ValidationPolicy.NEVER,
+        new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
+        new KeyServerBuilder());
   }
 
   @Test
   public void testSignedInvalidPublicKeyValidationAlwaysFails(TestContext context) throws Exception {
-    testValidationDeploymentFailed(context, ValidationPolicy.ALWAYS, repoHandler(verticle, verticleSignature, false), keyHandler(anotherKey));
+    testValidationDeploymentFailed(
+        context,
+        ValidationPolicy.ALWAYS,
+        new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
+        new KeyServerBuilder().setKey(anotherKey));
   }
 
   @Test
   public void testSignedInvalidPublicKeyValidationVerifyFails(TestContext context) throws Exception {
-    testValidationDeploymentFailed(context, ValidationPolicy.VERIFY, repoHandler(verticle, verticleSignature, false), keyHandler(anotherKey));
+    testValidationDeploymentFailed(
+        context,
+        ValidationPolicy.VERIFY,
+        new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
+        new KeyServerBuilder().setKey(anotherKey));
   }
 
   @Test
   public void testSignedInvalidPublicKeyValidationNeverFails(TestContext context) throws Exception {
-    testValidateDeployment(context, ValidationPolicy.NEVER, repoHandler(verticle, verticleSignature, false), keyHandler(anotherKey));
+    testValidateDeployment(
+        context,
+        ValidationPolicy.NEVER,
+        new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
+        new KeyServerBuilder().setKey(anotherKey));
   }
 
   private void testValidateDeployment(
       TestContext context,
       ValidationPolicy validationPolicy,
-      Handler<HttpServerRequest> repoHandler,
-      Handler<HttpServerRequest> keyHandler) throws Exception {
+      RepoBuilder repo,
+      KeyServerBuilder keyServer) throws Exception {
     System.setProperty(HttpServiceFactory.VALIDATION_POLICY, validationPolicy.name());
     System.setProperty(HttpServiceFactory.KEYSERVER_URI_TEMPLATE, "http://localhost:8081/pks/lookup?op=get&options=mr&search=0x%016X");
     vertx = Vertx.vertx();
-    HttpServer repoServer = vertx.createHttpServer().requestHandler(repoHandler);
-    HttpServer keyServer = vertx.createHttpServer().requestHandler(keyHandler);
-    repoServer.listen(8080, context.asyncAssertSuccess(s ->
-        keyServer.listen(8081, context.asyncAssertSuccess(ss -> vertx.
+    repo.build().listen(8080, context.asyncAssertSuccess(s ->
+        keyServer.build().listen(8081, context.asyncAssertSuccess(ss -> vertx.
                 deployVerticle("http://localhost:8080/the_verticle.zip::main", context.asyncAssertSuccess()))
         )));
   }
@@ -339,15 +333,13 @@ public class DeploymentTest {
   private void testValidationDeploymentFailed(
       TestContext context,
       ValidationPolicy validationPolicy,
-      Handler<HttpServerRequest> repoHandler,
-      Handler<HttpServerRequest> keyHandler) throws Exception {
+      RepoBuilder repo,
+      KeyServerBuilder keyServer) throws Exception {
     System.setProperty(HttpServiceFactory.VALIDATION_POLICY, validationPolicy.name());
     System.setProperty(HttpServiceFactory.KEYSERVER_URI_TEMPLATE, "http://localhost:8081/pks/lookup?op=get&options=mr&search=0x%016X");
     vertx = Vertx.vertx();
-    HttpServer repoServer = vertx.createHttpServer().requestHandler(repoHandler);
-    HttpServer keyServer = vertx.createHttpServer().requestHandler(keyHandler);
-    repoServer.listen(8080, context.asyncAssertSuccess(s ->
-        keyServer.listen(8081, context.asyncAssertSuccess(ss -> vertx.
+    repo.build().listen(8080, context.asyncAssertSuccess(s ->
+        keyServer.build().listen(8081, context.asyncAssertSuccess(ss -> vertx.
                 deployVerticle("http://localhost:8080/the_verticle.zip::main", context.asyncAssertFailure()))
         )));
   }
@@ -363,6 +355,117 @@ public class DeploymentTest {
     System.clearProperty(HttpServiceFactory.AUTH_USERNAME_PROPERTY);
     if (vertx != null) {
       vertx.close(context.asyncAssertSuccess());
+    }
+  }
+
+  class RepoBuilder {
+
+    Buffer verticle;
+    Buffer signature;
+    boolean authenticated;
+    boolean secure;
+
+    RepoBuilder setVerticle(Buffer verticle) {
+      this.verticle = verticle;
+      return this;
+    }
+
+    RepoBuilder setSignature(Buffer signature) {
+      this.signature = signature;
+      return this;
+    }
+
+    RepoBuilder setAuthenticated(boolean authenticated) {
+      this.authenticated = authenticated;
+      return this;
+    }
+
+    RepoBuilder setSecure(boolean secure) {
+      this.secure = secure;
+      return this;
+    }
+
+    HttpServer build() {
+      HttpServerOptions options = new HttpServerOptions();
+      if (secure) {
+        options.
+            setSsl(true).
+            setKeyStoreOptions(
+                new JksOptions().
+                    setPath("src/test/resources/server-keystore.jks").
+                    setPassword("wibble"));
+      }
+      return vertx.createHttpServer(options).requestHandler(req -> {
+        if (authenticated && !auth.equals(req.getHeader("Authorization"))) {
+          req.response().
+              setStatusCode(401).
+              putHeader("WWW-Authenticate", "Basic realm=\"TheRealm\"").
+              end();
+          return;
+        }
+        if (req.path().equals("/the_verticle.zip")) {
+          req.response().
+              putHeader("Content-Length", "" + verticle.length()).
+              putHeader("Content-type", "application/octet-stream").
+              write(verticle).
+              end();
+          return;
+        } else if (req.path().equals("/the_verticle.zip.asc") && signature != null) {
+          req.response().
+              putHeader("Content-Length", "" + signature.length()).
+              putHeader("Content-type", "application/octet-stream").
+              write(signature).
+              end();
+          return;
+        }
+        req.response().setStatusCode(404).end();
+      });
+    }
+  }
+
+  class KeyServerBuilder {
+
+    Buffer key;
+    Buffer signature;
+    boolean authenticated;
+    boolean secure;
+
+    KeyServerBuilder setKey(Buffer key) {
+      this.key = key;
+      return this;
+    }
+
+    KeyServerBuilder setAuthenticated(boolean authenticated) {
+      this.authenticated = authenticated;
+      return this;
+    }
+
+    KeyServerBuilder setSecure(boolean secure) {
+      this.secure = secure;
+      return this;
+    }
+
+    HttpServer build() {
+      HttpServerOptions options = new HttpServerOptions();
+      if (secure) {
+        options.
+            setSsl(true).
+            setKeyStoreOptions(
+                new JksOptions().
+                    setPath("src/test/resources/server-keystore.jks").
+                    setPassword("wibble"));
+      }
+      return vertx.createHttpServer(options).requestHandler(req -> {
+        if (key != null &&
+            req.path().equals("/pks/lookup") &&
+            "get".equals(req.getParam("op")) &&
+            "mr".equals(req.getParam("options")) &&
+            "0x9F9358A769793D09".equals(req.getParam("search"))) {
+          req.response().setChunked(true).setStatusCode(200).write(key).end();
+        } else {
+          req.response().setStatusCode(404).end();
+        }
+      });
     }
   }
 }
