@@ -1,11 +1,9 @@
 package io.vertx.ext.httpservicefactory;
 
-import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
-import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.net.JksOptions;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
@@ -58,16 +56,16 @@ public class DeploymentTest {
   }
 
   @Test
-  public void testDeployFromServerWithMain(TestContext context) {
-    testDeployFromServer(context, "http://localhost:8080/the_verticle.zip", verticleWithMain);
+  public void testDeployFromRepoWithMain(TestContext context) {
+    testDeploy(context, "http://localhost:8080/the_verticle.zip", verticleWithMain);
   }
 
   @Test
-  public void testDeployFromServerWithService(TestContext context) {
-    testDeployFromServer(context, "http://localhost:8080/the_verticle.zip::main", verticle);
+  public void testDeployFromRepoWithService(TestContext context) {
+    testDeploy(context, "http://localhost:8080/the_verticle.zip::main", verticle);
   }
 
-  private void testDeployFromServer(TestContext context, String url, Buffer verticle) {
+  private void testDeploy(TestContext context, String url, Buffer verticle) {
     vertx = Vertx.vertx();
     HttpServer server = new RepoBuilder().setVerticle(verticle).build();
     Async async = context.async();
@@ -121,19 +119,19 @@ public class DeploymentTest {
   }
 
   @Test
-  public void testDeployFromSecureServerWithTrustAll(TestContext context) {
+  public void testDeployFromSecureRepoWithTrustAll(TestContext context) {
     System.setProperty(HttpServiceFactory.HTTPS_CLIENT_OPTIONS_PROPERTY, "{\"trustAll\":true}");
-    testDeployFromSecureServer(context);
+    testDeployFromSecureRepo(context);
   }
 
   @Test
-  public void testDeployFromSecureServerWithTrustStore(TestContext context) {
+  public void testDeployFromSecureRepoWithTrustStore(TestContext context) {
     System.setProperty(HttpServiceFactory.HTTPS_CLIENT_OPTIONS_PROPERTY,
         "{\"trustStoreOptions\":{\"path\":\"src/test/resources/client-truststore.jks\",\"password\":\"wibble\"}}");
-    testDeployFromSecureServer(context);
+    testDeployFromSecureRepo(context);
   }
 
-  private void testDeployFromSecureServer(TestContext context) {
+  private void testDeployFromSecureRepo(TestContext context) {
     vertx = Vertx.vertx();
     HttpServer server = new RepoBuilder().setSecure(true).setVerticle(verticleWithMain).build();
     Async async = context.async();
@@ -150,7 +148,7 @@ public class DeploymentTest {
   }
 
   @Test
-  public void testDeployFromAuthenticatedServer(TestContext context) {
+  public void testDeployFromAuthenticatedRepo(TestContext context) {
     System.setProperty(HttpServiceFactory.AUTH_USERNAME_PROPERTY, "the_username");
     System.setProperty(HttpServiceFactory.AUTH_PASSWORD_PROPERTY, "the_password");
     vertx = Vertx.vertx();
@@ -168,7 +166,7 @@ public class DeploymentTest {
   }
 
   @Test
-  public void testDeployFromAuthenticatedSecureServer(TestContext context) {
+  public void testDeployFromAuthenticatedSecureRepo(TestContext context) {
     System.setProperty(HttpServiceFactory.AUTH_USERNAME_PROPERTY, "the_username");
     System.setProperty(HttpServiceFactory.AUTH_PASSWORD_PROPERTY, "the_password");
     System.setProperty(HttpServiceFactory.HTTPS_CLIENT_OPTIONS_PROPERTY, "{\"trustAll\":true}");
@@ -183,7 +181,7 @@ public class DeploymentTest {
   }
 
   @Test
-  public void testFailDeployFromAuthenticatedServer(TestContext context) {
+  public void testFailDeployFromAuthenticatedRepo(TestContext context) {
     vertx = Vertx.vertx();
     HttpServer server = new RepoBuilder().setVerticle(verticleWithMain).setAuthenticated(true).build();
     Async async = context.async();
