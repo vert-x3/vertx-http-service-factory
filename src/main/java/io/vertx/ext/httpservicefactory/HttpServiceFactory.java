@@ -66,9 +66,25 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
     this.vertx = vertx;
   }
 
+  protected HttpClientOptions createHttpClientOptions(String scheme) {
+    if ("https".equals(scheme)) {
+      String optionsJson = System.getProperty(HTTPS_CLIENT_OPTIONS_PROPERTY);
+      HttpClientOptions options;
+      if (optionsJson != null) {
+        options = new HttpClientOptions(new JsonObject(optionsJson));
+      } else {
+        options = createHttpClientOptions("http");
+      }
+      options.setSsl(true);
+      return options;
+    } else {
+      String optionsJson = System.getProperty(HTTP_CLIENT_OPTIONS_PROPERTY);
+      return optionsJson != null ? new HttpClientOptions(new JsonObject(optionsJson)) : new HttpClientOptions();
+    }
+  }
+
   protected HttpClientOptions configOptions() {
-    String optionsJson = System.getProperty(HTTP_CLIENT_OPTIONS_PROPERTY);
-    return optionsJson != null ? new HttpClientOptions(new JsonObject(optionsJson)) : new HttpClientOptions();
+    return createHttpClientOptions(prefix());
   }
 
   @Override
@@ -124,7 +140,14 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
             resolution.fail(e);
             return;
           }
-          doRequest(client, publicKeyFile, publicKeyURI, null, null, false, ar2 -> {
+          HttpClient keyserverClient;
+          if (!publicKeyURI.getScheme().equals(prefix())) {
+            client.close();
+            keyserverClient = vertx.createHttpClient(createHttpClientOptions(publicKeyURI.getScheme()));
+          } else {
+            keyserverClient = client;
+          }
+          doRequest(keyserverClient, publicKeyFile, publicKeyURI, null, null, false, ar2 -> {
             if (ar2.succeeded()) {
               try {
                 PGPPublicKey publicKey = PGPHelper.getPublicKey(Files.readAllBytes(ar2.result().toPath()), signature.getKeyID());
@@ -140,10 +163,10 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
               } catch (Exception e) {
                 resolution.fail(e);
               } finally {
-                client.close();
+                keyserverClient.close();
               }
             } else {
-              client.close();
+              keyserverClient.close();
               resolution.fail(ar2.cause());
             }
           });

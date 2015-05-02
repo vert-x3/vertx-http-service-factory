@@ -315,13 +315,34 @@ public class DeploymentTest {
         new KeyServerBuilder().setKey(anotherKey));
   }
 
+  @Test
+  public void testSignedFromSecureKeyserver(TestContext context) throws Exception {
+    System.setProperty(HttpServiceFactory.HTTPS_CLIENT_OPTIONS_PROPERTY,
+        "{\"trustStoreOptions\":{\"path\":\"src/test/resources/client-truststore.jks\",\"password\":\"wibble\"}}");
+    testValidateDeployment(
+        context,
+        ValidationPolicy.ALWAYS,
+        new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
+        new KeyServerBuilder().setSecure(true).setKey(validatingKey),
+        "https://localhost:8081/pks/lookup?op=get&options=mr&search=0x%016X");
+  }
+
   private void testValidateDeployment(
       TestContext context,
       ValidationPolicy validationPolicy,
       RepoBuilder repo,
       KeyServerBuilder keyServer) throws Exception {
+    testValidateDeployment(context, validationPolicy, repo, keyServer, "http://localhost:8081/pks/lookup?op=get&options=mr&search=0x%016X");
+  }
+
+  private void testValidateDeployment(
+      TestContext context,
+      ValidationPolicy validationPolicy,
+      RepoBuilder repo,
+      KeyServerBuilder keyServer,
+      String keyServerUriTemplate) throws Exception {
     System.setProperty(HttpServiceFactory.VALIDATION_POLICY, validationPolicy.name());
-    System.setProperty(HttpServiceFactory.KEYSERVER_URI_TEMPLATE, "http://localhost:8081/pks/lookup?op=get&options=mr&search=0x%016X");
+    System.setProperty(HttpServiceFactory.KEYSERVER_URI_TEMPLATE, keyServerUriTemplate);
     vertx = Vertx.vertx();
     repo.build().listen(8080, context.asyncAssertSuccess(s ->
         keyServer.build().listen(8081, context.asyncAssertSuccess(ss -> vertx.
