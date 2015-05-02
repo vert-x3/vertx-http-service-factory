@@ -5,6 +5,7 @@ import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.file.AsyncFile;
 import io.vertx.core.file.OpenOptions;
 import io.vertx.core.http.HttpClient;
@@ -12,6 +13,7 @@ import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.streams.Pump;
+import io.vertx.core.streams.WriteStream;
 import io.vertx.service.ServiceVerticleFactory;
 import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPSignature;
@@ -25,6 +27,8 @@ import java.net.URLEncoder;
 import java.nio.file.Files;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.jar.Attributes;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
@@ -147,7 +151,27 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
           } else {
             keyserverClient = client;
           }
-          doRequest(keyserverClient, publicKeyFile, publicKeyURI, null, null, false, ar2 -> {
+
+          Function<String, Function<Buffer, Buffer>> unmarshallerFactory = mediaType -> {
+            switch (mediaType) {
+              case "application/json":
+                Buffer buffer = Buffer.buffer();
+                return buf -> {
+                  if (buf == null) {
+                    JsonObject json = new JsonObject(buffer.toString());
+                    return Buffer.buffer(json.getJsonArray("keys").getJsonObject(0).getString("bundle"));
+                  } else {
+                    buffer.appendBuffer(buf);
+                    return null;
+                  }
+                };
+              case "application/pgp-keys":
+              default:
+                return Function.identity();
+            }
+          };
+
+          doRequest(keyserverClient, publicKeyFile, publicKeyURI, null, null, false, unmarshallerFactory, ar2 -> {
             if (ar2.succeeded()) {
               try {
                 PGPPublicKey publicKey = PGPHelper.getPublicKey(Files.readAllBytes(ar2.result().toPath()), signature.getKeyID());
@@ -180,7 +204,30 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
     });
   }
 
-  private void doRequest(HttpClient client, File file, URI url, String username, String password, boolean auth, Handler<AsyncResult<File>> handler) {
+  /**
+   * The {@code unmarshallerFactory} argument is a function that returns an {@code Function<Buffer, Buffer>} unmarshaller
+   * function for a given media type value. The returned function unmarshaller function will be called with the buffers
+   * to unmarshall and finally with a null buffer to signal the end of the unmarshalled data. It can return a buffer
+   * or a null value.
+   *
+   * @param client the http client
+   * @param file the file where to save the content
+   * @param url the resource url
+   * @param username the optional username used for basic auth
+   * @param password the optional password used for basic auth
+   * @param auth whether to perform authentication or not
+   * @param unmarshallerFactory the unmarshaller factory
+   * @param handler the result handler
+   */
+  private void doRequest(
+      HttpClient client,
+      File file,
+      URI url,
+      String username,
+      String password,
+      boolean auth,
+      Function<String, Function<Buffer, Buffer>> unmarshallerFactory,
+      Handler<AsyncResult<File>> handler) {
     if (file.exists() && file.isFile()) {
       handler.handle(Future.succeededFuture(file));
       return;
@@ -204,12 +251,48 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
           if (ar2.succeeded()) {
             resp.resume();
             AsyncFile result = ar2.result();
-            Pump pump = Pump.pump(resp, ar2.result());
+            String contentType = resp.getHeader("Content-Type");
+            int index = contentType.indexOf(";");
+            String mediaType = index > -1 ? contentType.substring(0, index) : contentType;
+            Function<Buffer, Buffer> unmarshaller = unmarshallerFactory.apply(mediaType);
+            Pump pump = Pump.pump(resp, new WriteStream<Buffer>() {
+              @Override
+              public WriteStream<Buffer> exceptionHandler(Handler<Throwable> handler) {
+                result.exceptionHandler(handler);
+                return this;
+              }
+              @Override
+              public WriteStream<Buffer> write(Buffer data) {
+                data = unmarshaller.apply(data);
+                if (data != null) {
+                  result.write(data);
+                }
+                return this;
+              }
+              @Override
+              public WriteStream<Buffer> setWriteQueueMaxSize(int maxSize) {
+                result.setWriteQueueMaxSize(maxSize);
+                return this;
+              }
+              @Override
+              public boolean writeQueueFull() {
+                return result.writeQueueFull();
+              }
+              @Override
+              public WriteStream<Buffer> drainHandler(Handler<Void> handler) {
+                result.drainHandler(handler);
+                return this;
+              }
+            });
             pump.start();
             resp.exceptionHandler(err -> {
               handler.handle(Future.failedFuture(ar2.cause()));
             });
             resp.endHandler(v1 -> {
+              Buffer last = unmarshaller.apply(null);
+              if (last != null) {
+                result.write(last);
+              }
               result.close(v2 -> {
                 if (v2.succeeded()) {
                   handler.handle(Future.succeededFuture(file));
@@ -224,7 +307,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
         });
       } else if (status == 401) {
         if (prefix().equals("https") && resp.getHeader("WWW-Authenticate") != null && username != null && password != null) {
-          doRequest(client, file, url, username, password, true, handler);
+          doRequest(client, file, url, username, password, true, unmarshallerFactory, handler);
           return;
         }
         handler.handle(Future.failedFuture(new Exception("Unauthorized")));
@@ -246,12 +329,13 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
     }
   }
 
-  protected void doRequest(HttpClient client, File file, URI url, File signatureFile, URI signatureURL, Handler<AsyncResult<Result>> handler) {
-    doRequest(client, file, url, username, password, false, ar1 -> {
+  protected void doRequest(HttpClient client, File file, URI url, File signatureFile,
+                           URI signatureURL, Handler<AsyncResult<Result>> handler) {
+    doRequest(client, file, url, username, password, false, ct -> Function.identity(), ar1 -> {
       if (ar1.succeeded()) {
         // Now get the signature if any
         if (validationPolicy != ValidationPolicy.NEVER) {
-          doRequest(client, signatureFile, signatureURL, username, password, false, ar3 -> {
+          doRequest(client, signatureFile, signatureURL, username, password, false, ct -> Function.identity(), ar3 -> {
             if (ar3.succeeded()) {
               handler.handle(Future.succeededFuture(new Result(ar1.result(), ar3.result())));
             } else {

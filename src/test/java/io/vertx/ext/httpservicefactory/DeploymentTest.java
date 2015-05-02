@@ -1,9 +1,11 @@
 package io.vertx.ext.httpservicefactory;
 
+import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
+import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.net.JksOptions;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
@@ -35,7 +37,8 @@ public class DeploymentTest {
   private static Buffer verticleWithMain;
   private static Buffer verticle;
   private static Buffer verticleSignature;
-  private static Buffer validatingKey;
+  private static Buffer validatingKey_asc;
+  private static Buffer validatingKey_json;
   private static Buffer anotherKey;
   private Vertx vertx;
 
@@ -44,7 +47,8 @@ public class DeploymentTest {
     verticle = Buffer.buffer(Files.readAllBytes(new File("target/test-verticle.zip").toPath()));
     verticleWithMain = Buffer.buffer(Files.readAllBytes(new File("target/test-verticle-with-main.zip").toPath()));
     verticleSignature = Buffer.buffer(Files.readAllBytes(new File("src/test/resources/test-verticle.asc").toPath()));
-    validatingKey = Buffer.buffer(Files.readAllBytes(new File("src/test/resources/validating_key.asc").toPath()));
+    validatingKey_asc = Buffer.buffer(Files.readAllBytes(new File("src/test/resources/validating_key.asc").toPath()));
+    validatingKey_json = Buffer.buffer(Files.readAllBytes(new File("src/test/resources/validating_key.json").toPath()));
     anotherKey = Buffer.buffer(Files.readAllBytes(new File("src/test/resources/another_key.asc").toPath()));
   }
 
@@ -215,7 +219,7 @@ public class DeploymentTest {
         context,
         ValidationPolicy.ALWAYS,
         new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
-        new KeyServerBuilder().setKey(validatingKey));
+        new KeyServerBuilder().setKey(validatingKey_asc));
   }
 
   @Test
@@ -224,7 +228,7 @@ public class DeploymentTest {
         context,
         ValidationPolicy.VERIFY,
         new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
-        new KeyServerBuilder().setKey(validatingKey));
+        new KeyServerBuilder().setKey(validatingKey_asc));
   }
 
   @Test
@@ -233,12 +237,12 @@ public class DeploymentTest {
         context,
         ValidationPolicy.NEVER,
         new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
-        new KeyServerBuilder().setKey(validatingKey));
+        new KeyServerBuilder().setKey(validatingKey_asc));
   }
 
   @Test
   public void testSignedMissingSignatureValidationAlwaysFails(TestContext context) throws Exception {
-    testValidationDeploymentFailed(context, ValidationPolicy.ALWAYS, new RepoBuilder().setVerticle(verticle), new KeyServerBuilder().setKey(validatingKey));
+    testValidationDeploymentFailed(context, ValidationPolicy.ALWAYS, new RepoBuilder().setVerticle(verticle), new KeyServerBuilder().setKey(validatingKey_asc));
   }
 
   @Test
@@ -247,7 +251,7 @@ public class DeploymentTest {
         context,
         ValidationPolicy.VERIFY,
         new RepoBuilder().setVerticle(verticle),
-        new KeyServerBuilder().setKey(validatingKey));
+        new KeyServerBuilder().setKey(validatingKey_asc));
   }
 
   @Test
@@ -256,7 +260,7 @@ public class DeploymentTest {
         context,
         ValidationPolicy.NEVER,
         new RepoBuilder().setVerticle(verticle),
-        new KeyServerBuilder().setKey(validatingKey));
+        new KeyServerBuilder().setKey(validatingKey_asc));
   }
 
   @Test
@@ -321,8 +325,31 @@ public class DeploymentTest {
         context,
         ValidationPolicy.ALWAYS,
         new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
-        new KeyServerBuilder().setSecure(true).setKey(validatingKey),
+        new KeyServerBuilder().setSecure(true).setKey(validatingKey_asc),
         "https://localhost:8081/pks/lookup?op=get&options=mr&search=0x%016X");
+  }
+
+  @Test
+  public void testKeybaseIO(TestContext context) throws Exception {
+    System.setProperty(HttpServiceFactory.HTTPS_CLIENT_OPTIONS_PROPERTY,
+        "{\"trustStoreOptions\":{\"path\":\"src/test/resources/client-truststore.jks\",\"password\":\"wibble\"}}");
+    testValidateDeployment(
+        context,
+        ValidationPolicy.ALWAYS,
+        new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
+        new KeyServerBuilder().setSecure(true).setKey(validatingKey_asc).setHandler(req -> {
+          if (req.path().equals("/_/api/1.0/key/fetch.json") && req.getParam("pgp_key_ids").equals("9F9358A769793D09")) {
+            req.response().
+                setStatusCode(200).
+                putHeader("Content-Length", "" + validatingKey_json.length()).
+                putHeader("Content-type", "application/json").
+                write(validatingKey_json).
+                end();
+          } else {
+            req.response().setStatusCode(404).end();
+          }
+        }),
+        "https://localhost:8081/_/api/1.0/key/fetch.json?pgp_key_ids=%016X");
   }
 
   private void testValidateDeployment(
@@ -445,9 +472,19 @@ public class DeploymentTest {
   class KeyServerBuilder {
 
     Buffer key;
-    Buffer signature;
     boolean authenticated;
     boolean secure;
+    Handler<HttpServerRequest> handler = req -> {
+      if (key != null &&
+          req.path().equals("/pks/lookup") &&
+          "get".equals(req.getParam("op")) &&
+          "mr".equals(req.getParam("options")) &&
+          "0x9F9358A769793D09".equals(req.getParam("search"))) {
+        req.response().putHeader("Content-Type", "application/pgp-keys; charset=UTF-8").setChunked(true).setStatusCode(200).write(key).end();
+      } else {
+        req.response().setStatusCode(404).end();
+      }
+    };
 
     KeyServerBuilder setKey(Buffer key) {
       this.key = key;
@@ -464,6 +501,11 @@ public class DeploymentTest {
       return this;
     }
 
+    KeyServerBuilder setHandler(Handler<HttpServerRequest> handler) {
+      this.handler = handler;
+      return this;
+    }
+
     HttpServer build() {
       HttpServerOptions options = new HttpServerOptions();
       if (secure) {
@@ -474,17 +516,25 @@ public class DeploymentTest {
                     setPath("src/test/resources/server-keystore.jks").
                     setPassword("wibble"));
       }
-      return vertx.createHttpServer(options).requestHandler(req -> {
-        if (key != null &&
-            req.path().equals("/pks/lookup") &&
-            "get".equals(req.getParam("op")) &&
-            "mr".equals(req.getParam("options")) &&
-            "0x9F9358A769793D09".equals(req.getParam("search"))) {
-          req.response().setChunked(true).setStatusCode(200).write(key).end();
-        } else {
-          req.response().setStatusCode(404).end();
-        }
-      });
+      return vertx.createHttpServer(options).requestHandler(handler);
     }
   }
+
+/*
+  @Test
+  public void testFoo() throws Exception {
+    vertx = Vertx.vertx();
+    HttpClient client = vertx.createHttpClient();
+    HttpClientRequest req = client.get(11371, "pool.sks-keyservers.net", "/pks/lookup?op=get&options=mr&search=0x9F9358A769793D09");
+    req.handler(resp -> {
+      System.out.println(resp.statusCode());
+      MultiMap headers = resp.headers();
+      for (Map.Entry<String, String> entry : headers) {
+        System.out.println(entry.getKey() + " -> " + entry.getValue());
+      }
+    });
+    req.end();
+    Thread.sleep(10000);
+  }
+*/
 }
