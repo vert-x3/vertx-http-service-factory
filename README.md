@@ -10,9 +10,9 @@ Supports basic auth, client configuration (for ssl, etc...), local cache, signat
 
 ## todo
 
+### support keyID while list
 ### doc
 ### better http response code handling (redirection)
-### Keybase.io support
 
 The query https://keybase.io/_/api/1.0/key/fetch.json?pgp_key_ids=9F9358A769793D09 returns:
 
