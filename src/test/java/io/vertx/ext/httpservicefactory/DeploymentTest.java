@@ -123,8 +123,7 @@ public class DeploymentTest {
   }
 
   @Test
-  public void testDeployFromSecureRepoWithTrustAll(TestContext context) {
-    System.setProperty(HttpServiceFactory.HTTPS_CLIENT_OPTIONS_PROPERTY, "{\"trustAll\":true}");
+  public void testDeployFromSecureRepoDefault(TestContext context) {
     testDeployFromSecureRepo(context);
   }
 

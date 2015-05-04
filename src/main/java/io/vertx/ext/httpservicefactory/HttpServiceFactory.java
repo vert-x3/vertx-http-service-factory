@@ -77,7 +77,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
       if (optionsJson != null) {
         options = new HttpClientOptions(new JsonObject(optionsJson));
       } else {
-        options = createHttpClientOptions("http");
+        options = createHttpClientOptions("http").setTrustAll(true);
       }
       options.setSsl(true);
       return options;
