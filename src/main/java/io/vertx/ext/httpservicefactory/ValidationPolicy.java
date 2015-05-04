@@ -8,7 +8,7 @@ public enum ValidationPolicy {
   /**
    * Never do any check.
    */
-  NEVER,
+  NONE,
 
   /**
    * Validate the deployment when a signature exists for this deployment: when the signature cannot be verified
@@ -19,6 +19,6 @@ public enum ValidationPolicy {
   /**
    * Any deployment must be verified to be deployed.
    */
-  ALWAYS,
+  MANDATORY,
 
 }

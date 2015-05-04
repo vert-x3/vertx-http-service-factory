@@ -27,7 +27,6 @@ import java.net.URLEncoder;
 import java.nio.file.Files;
 import java.util.Base64;
 import java.util.Collections;
-import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.jar.Attributes;
 import java.util.jar.JarFile;
@@ -342,12 +341,12 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
     doRequest(client, file, url, username, password, false, ct -> Function.identity(), ar1 -> {
       if (ar1.succeeded()) {
         // Now get the signature if any
-        if (validationPolicy != ValidationPolicy.NEVER) {
+        if (validationPolicy != ValidationPolicy.NONE) {
           doRequest(client, signatureFile, signatureURL, username, password, false, ct -> Function.identity(), ar3 -> {
             if (ar3.succeeded()) {
               handler.handle(Future.succeededFuture(new Result(ar1.result(), ar3.result())));
             } else {
-              if (validationPolicy == ValidationPolicy.ALWAYS) {
+              if (validationPolicy == ValidationPolicy.MANDATORY) {
                 handler.handle(Future.failedFuture(ar3.cause()));
               } else {
                 handler.handle(Future.succeededFuture(new Result(ar1.result(), null)));

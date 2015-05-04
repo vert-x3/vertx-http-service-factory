@@ -56,7 +56,7 @@ public class DeploymentTest {
   public void before() {
     cacheDir = "target" + File.separator + "file-cache-" + name.getMethodName();
     System.setProperty(HttpServiceFactory.CACHE_DIR_PROPERTY, cacheDir);
-    System.setProperty(HttpServiceFactory.VALIDATION_POLICY, "" + ValidationPolicy.NEVER);
+    System.setProperty(HttpServiceFactory.VALIDATION_POLICY, "" + ValidationPolicy.NONE);
   }
 
   @Test
@@ -213,10 +213,10 @@ public class DeploymentTest {
   }
 
   @Test
-  public void testSignedValidationAlwaysDeploys(TestContext context) throws Exception {
+  public void testSignedValidationMandatoryDeploys(TestContext context) throws Exception {
     testValidateDeployment(
         context,
-        ValidationPolicy.ALWAYS,
+        ValidationPolicy.MANDATORY,
         new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
         new KeyServerBuilder().setKey(validatingKey_asc));
   }
@@ -231,17 +231,17 @@ public class DeploymentTest {
   }
 
   @Test
-  public void testSignedValidationNeverDeploys(TestContext context) throws Exception {
+  public void testSignedValidationNoneDeploys(TestContext context) throws Exception {
     testValidateDeployment(
         context,
-        ValidationPolicy.NEVER,
+        ValidationPolicy.NONE,
         new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
         new KeyServerBuilder().setKey(validatingKey_asc));
   }
 
   @Test
-  public void testSignedMissingSignatureValidationAlwaysFails(TestContext context) throws Exception {
-    testValidationDeploymentFailed(context, ValidationPolicy.ALWAYS, new RepoBuilder().setVerticle(verticle), new KeyServerBuilder().setKey(validatingKey_asc));
+  public void testSignedMissingSignatureValidationMandatoryFails(TestContext context) throws Exception {
+    testValidationDeploymentFailed(context, ValidationPolicy.MANDATORY, new RepoBuilder().setVerticle(verticle), new KeyServerBuilder().setKey(validatingKey_asc));
   }
 
   @Test
@@ -254,19 +254,19 @@ public class DeploymentTest {
   }
 
   @Test
-  public void testSignedMissingSignatureValidationNeverDeploys(TestContext context) throws Exception {
+  public void testSignedMissingSignatureValidationNoneDeploys(TestContext context) throws Exception {
     testValidateDeployment(
         context,
-        ValidationPolicy.NEVER,
+        ValidationPolicy.NONE,
         new RepoBuilder().setVerticle(verticle),
         new KeyServerBuilder().setKey(validatingKey_asc));
   }
 
   @Test
-  public void testSignedMissingPublicKeyValidationAlwaysFails(TestContext context) throws Exception {
+  public void testSignedMissingPublicKeyValidationMandatoryFails(TestContext context) throws Exception {
     testValidationDeploymentFailed(
         context,
-        ValidationPolicy.ALWAYS,
+        ValidationPolicy.MANDATORY,
         new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
         new KeyServerBuilder());
   }
@@ -281,19 +281,19 @@ public class DeploymentTest {
   }
 
   @Test
-  public void testSignedMissingPublicKeyValidationNeverDeploys(TestContext context) throws Exception {
+  public void testSignedMissingPublicKeyValidationNoneDeploys(TestContext context) throws Exception {
     testValidateDeployment(
         context,
-        ValidationPolicy.NEVER,
+        ValidationPolicy.NONE,
         new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
         new KeyServerBuilder());
   }
 
   @Test
-  public void testSignedInvalidPublicKeyValidationAlwaysFails(TestContext context) throws Exception {
+  public void testSignedInvalidPublicKeyValidationMandatoryFails(TestContext context) throws Exception {
     testValidationDeploymentFailed(
         context,
-        ValidationPolicy.ALWAYS,
+        ValidationPolicy.MANDATORY,
         new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
         new KeyServerBuilder().setKey(anotherKey));
   }
@@ -308,10 +308,10 @@ public class DeploymentTest {
   }
 
   @Test
-  public void testSignedInvalidPublicKeyValidationNeverFails(TestContext context) throws Exception {
+  public void testSignedInvalidPublicKeyValidationNoneFails(TestContext context) throws Exception {
     testValidateDeployment(
         context,
-        ValidationPolicy.NEVER,
+        ValidationPolicy.NONE,
         new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
         new KeyServerBuilder().setKey(anotherKey));
   }
@@ -322,7 +322,7 @@ public class DeploymentTest {
         "{\"trustStoreOptions\":{\"path\":\"src/test/resources/client-truststore.jks\",\"password\":\"wibble\"}}");
     testValidateDeployment(
         context,
-        ValidationPolicy.ALWAYS,
+        ValidationPolicy.MANDATORY,
         new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
         new KeyServerBuilder().setSecure(true).setKey(validatingKey_asc),
         "https://localhost:8081/pks/lookup?op=get&options=mr&search=0x%016X");
@@ -334,7 +334,7 @@ public class DeploymentTest {
         "{\"trustStoreOptions\":{\"path\":\"src/test/resources/client-truststore.jks\",\"password\":\"wibble\"}}");
     testValidateDeployment(
         context,
-        ValidationPolicy.ALWAYS,
+        ValidationPolicy.MANDATORY,
         new RepoBuilder().setVerticle(verticle).setSignature(verticleSignature),
         new KeyServerBuilder().setSecure(true).setKey(validatingKey_asc).setHandler(req -> {
           if (req.path().equals("/_/api/1.0/key/fetch.json") && req.getParam("pgp_key_ids").equals("9F9358A769793D09")) {
