@@ -236,7 +236,15 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
     if (url.getQuery() != null) {
       requestURI += "?" + url.getQuery();
     }
-    HttpClientRequest req = client.get(url.getPort(), url.getHost(), requestURI);
+    int port = url.getPort();
+    if (port == -1) {
+      if ("http".equals(url.getScheme())) {
+        port = 80;
+      } else {
+        port = 443;
+      }
+    }
+    HttpClientRequest req = client.get(port, url.getHost(), requestURI);
     if (auth && username != null && password != null) {
       req.putHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString((username + ":" + password).getBytes()));
     }
