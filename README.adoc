@@ -1,0 +1,18 @@
+== Vertx http service factory
+
+A service factory that deploys from HTTP servers
+
+----
+vertx run https://myserver.net/myverticle.zip
+----
+
+Supports basic auth, client configuration (for ssl, etc...), local cache, signature verification
+
+## Documentation
+
+Follow this link:src/main/asciidoc/java/index.adoc[link].
+
+== Todo
+
+- support keyID while list
+- better http response code handling (redirection)
