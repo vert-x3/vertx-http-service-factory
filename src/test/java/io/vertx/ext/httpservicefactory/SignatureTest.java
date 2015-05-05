@@ -15,20 +15,20 @@ import java.nio.file.Files;
 public class SignatureTest {
 
   @Test
-  public void testVerifed() throws Exception {
+  public void testVerified() throws Exception {
     // Generate test-verticle.asc with
-    // gpg -ab --output doc.asc --sign target/test-verticle.zip
+    // gpg -ab --output src/test/resources/test-verticle.asc --sign src/test/resources/test-verticle.zip
     verify("src/test/resources/validating_key.asc", true);
   }
 
   @Test
-  public void testNotVerifed() throws Exception {
+  public void testNotVerified() throws Exception {
     verify("src/test/resources/another_key.asc", false);
   }
 
   private void verify(String keyPath, boolean expected) throws Exception {
     File key = new File(keyPath);
-    File file = new File("target/test-verticle.zip");
+    File file = new File("src/test/resources/test-verticle.zip");
     File signature = new File("src/test/resources/test-verticle.asc");
     Assert.assertTrue(file.exists());
     Assert.assertTrue(signature.exists());

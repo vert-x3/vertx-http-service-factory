@@ -44,7 +44,7 @@ public class DeploymentTest {
 
   @BeforeClass
   public static void init() throws Exception {
-    verticle = Buffer.buffer(Files.readAllBytes(new File("target/test-verticle.zip").toPath()));
+    verticle = Buffer.buffer(Files.readAllBytes(new File("src/test/resources/test-verticle.zip").toPath()));
     verticleWithMain = Buffer.buffer(Files.readAllBytes(new File("target/test-verticle-with-main.zip").toPath()));
     verticleSignature = Buffer.buffer(Files.readAllBytes(new File("src/test/resources/test-verticle.asc").toPath()));
     validatingKey_asc = Buffer.buffer(Files.readAllBytes(new File("src/test/resources/validating_key.asc").toPath()));
