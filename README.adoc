@@ -15,4 +15,5 @@ Follow this link:src/main/asciidoc/java/index.adoc[link].
 == Todo
 
 - support keyID while list
-- better http response code handling (redirection)
+- better http response code handling (redirection port from Vert.x 2)
+- proxy support (port from Vert.x 2)
