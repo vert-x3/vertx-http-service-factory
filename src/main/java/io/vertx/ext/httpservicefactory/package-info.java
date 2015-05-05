@@ -3,7 +3,58 @@
  *
  * The http service factory is a Vert.x service factory for deploying services from an http server.
  *
- * The factory is bound to the prefixes : _http_ and _https_:
+ * ----
+ * vertx run https://myserver.net/myverticle.zip::my-service
+ * ----
+ *
+ * Although it looks like an http URL, it is a verticle identifer with a factory bound to the _https_ prefix (_http_
+ * also supported).
+ *
+ * The service identifier is made up of the suffix to form an _http_ URL or the archive that contains the service,
+ * followed by a double colon `::` and a service name.
+ *
+ * The service name is used to find the service descriptor file inside the artifact which is named by the service name with
+ * a `.json` extension. This is explained in the link:https://github.com/vert-x3/vertx-service-factory[Service Verticle Factory]
+ * documentation.
+ *
+ * For example, to deploy a service that exists in an hosted at `https://myserver.net/myverticle.zip` called `my-service`
+ * you would use the strng `https://myserver.net/myverticle.zip::my-service`.
+ *
+ * Given this string, the verticle factory will use the Vert.x http client try and download the resource
+ * `https://myserver.net/myverticle.zip`.
+ *
+ * It then constructs a classpath including this archive and creates a classloader with that classpath in order
+ * to load the service using the standard link:https://github.com/vert-x3/vertx-service-factory[Service Verticle Factory].
+ *
+ * The Service Verticle Factory will look for a descriptor file called `my-service.json on the constructed classpath to
+ * actually load the service.
+ *
+ * Given a service identifier the service can be deployed programmatically e.g.:
+ *
+ * ----
+ * vertx.deployVerticle("https://myserver.net/myverticle.zip::my-service", ...)
+ * ----
+ *
+ * Or can be deployed on the command line with:
+ *
+ * ----
+ * vertx run https://myserver.net/myverticle.zip::my-service
+ * ----
+ *
+ * The service name can be omitted when the service jar `META-INF/MANIFEST` contains a `Main-Verticle`entry that
+ * declares the verticle to run:
+ *
+ * ----
+ * vertx.deployVerticle("https://myserver.net/myverticle.zip", ...)
+ * ----
+ *
+ * And the manifest contains:
+ *
+ * ----
+ * Main-Verticle: service:my.service
+ * ----
+ *
+ * Of course it can be deployed on the command line with:
  *
  * ----
  * vertx run https://myserver.net/myverticle.zip
