@@ -33,7 +33,7 @@ public class DeploymentTest {
   @Rule
   public TestName name = new TestName();
   private final String auth = "Basic " + Base64.getEncoder().encodeToString("the_username:the_password".getBytes());
-  private String cacheDir;
+  private String cachePath;
   private static Buffer verticleWithMain;
   private static Buffer verticle;
   private static Buffer verticleSignature;
@@ -54,9 +54,14 @@ public class DeploymentTest {
 
   @Before
   public void before() {
-    cacheDir = "target" + File.separator + "file-cache-" + name.getMethodName();
-    System.setProperty(HttpServiceFactory.CACHE_DIR_PROPERTY, cacheDir);
+    cachePath = "target" + File.separator + "file-cache-" + name.getMethodName();
+    System.setProperty(HttpServiceFactory.CACHE_DIR_PROPERTY, cachePath);
     System.setProperty(HttpServiceFactory.VALIDATION_POLICY, "" + ValidationPolicy.NONE);
+  }
+
+  @Test
+  public void testDeployWithNoConfig(TestContext context) {
+    testDeploy(context, "http://localhost:8080/the_verticle.zip", verticleWithMain);
   }
 
   @Test
@@ -201,7 +206,9 @@ public class DeploymentTest {
   public void testDeployFromCache(TestContext context) throws Exception {
     vertx = Vertx.vertx();
     String key = URLEncoder.encode("http://localhost:8080/the_verticle.zip", "UTF-8");
-    Files.copy(new ByteArrayInputStream(verticleWithMain.getBytes()), new File(new File(cacheDir), key).toPath());
+    File cacheDir = new File(cachePath);
+    cacheDir.mkdirs();
+    Files.copy(new ByteArrayInputStream(verticleWithMain.getBytes()), new File(cacheDir, key).toPath());
     Async async = context.async();
     vertx.eventBus().consumer("the_test", msg -> {
       context.assertEquals("pass", msg.body());

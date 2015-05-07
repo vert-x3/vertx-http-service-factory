@@ -58,9 +58,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
 
   @Override
   public void init(Vertx vertx) {
-    String path = System.getProperty(CACHE_DIR_PROPERTY, FILE_CACHE_DIR);
-    cacheDir = new File(path);
-    cacheDir.mkdirs();
+    cacheDir = new File(System.getProperty(CACHE_DIR_PROPERTY, FILE_CACHE_DIR));
     options = configOptions();
     validationPolicy = ValidationPolicy.valueOf(System.getProperty(VALIDATION_POLICY).toUpperCase());
     username = System.getProperty(AUTH_USERNAME_PROPERTY);
@@ -254,6 +252,10 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
       int status = resp.statusCode();
       if (status == 200) {
         resp.pause();
+        File parentFile = file.getParentFile();
+        if (!parentFile.exists()) {
+          parentFile.mkdirs();
+        }
         vertx.fileSystem().open(file.getPath(), new OpenOptions().setCreate(true), ar2 -> {
           if (ar2.succeeded()) {
             resp.resume();
