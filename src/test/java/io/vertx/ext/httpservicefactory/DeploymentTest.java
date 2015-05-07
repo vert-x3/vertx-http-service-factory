@@ -87,25 +87,25 @@ public class DeploymentTest {
 
   @Test
   public void testFailDeployMissingServiceName(TestContext context) {
-    testFailDeploy(context, "http://localhost:8080/the_verticle.zip", "Invalid service identifier, missing service name");
+    testFailDeploy(context, "http://localhost:8080/the_verticle.zip");
   }
 
   @Test
   public void testFailDeployCannotConnect(TestContext context) {
-    testFailDeploy(context, "http://localhost:8081/the_verticle.zip", "Connection refused");
+    testFailDeploy(context, "http://localhost:8081/the_verticle.zip");
   }
 
   @Test
   public void testFailDeployMalformedURL(TestContext context) {
-    testFailDeploy(context, "http://localhost:0/the_verticle.zip", "Can't assign requested address");
+    testFailDeploy(context, "http://localhost:0/the_verticle.zip");
   }
 
   @Test
   public void testFailDeployNotFound(TestContext context) {
-    testFailDeploy(context, "http://localhost:8080/not_found.zip", "404");
+    testFailDeploy(context, "http://localhost:8080/not_found.zip");
   }
 
-  private void testFailDeploy(TestContext context, String url, String msgMatch) {
+  private void testFailDeploy(TestContext context, String url) {
     vertx = Vertx.vertx();
     HttpServer server = new RepoBuilder().setVerticle(verticle).build();
     Async async = context.async();
@@ -114,8 +114,6 @@ public class DeploymentTest {
         context.asyncAssertSuccess(s -> {
           vertx.deployVerticle(url, ar -> {
             context.assertTrue(ar.failed());
-            context.assertTrue(ar.cause().getMessage().contains(msgMatch),
-                "Was expecting <" + ar.cause().getMessage() + "> to contain " + msgMatch);
             async.complete();
           });
         })
