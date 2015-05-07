@@ -60,7 +60,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
   public void init(Vertx vertx) {
     cacheDir = new File(System.getProperty(CACHE_DIR_PROPERTY, FILE_CACHE_DIR));
     options = configOptions();
-    validationPolicy = ValidationPolicy.valueOf(System.getProperty(VALIDATION_POLICY).toUpperCase());
+    validationPolicy = ValidationPolicy.valueOf(System.getProperty(VALIDATION_POLICY, ValidationPolicy.VERIFY.toString()).toUpperCase());
     username = System.getProperty(AUTH_USERNAME_PROPERTY);
     password = System.getProperty(AUTH_PASSWORD_PROPERTY);
     keyserverURITemplate = System.getProperty(KEYSERVER_URI_TEMPLATE, "http://pool.sks-keyservers.net:11371/pks/lookup?op=get&options=mr&search=0x%016X");
