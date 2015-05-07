@@ -101,7 +101,7 @@
                   <annotationProcessor>io.vertx.docgen.JavaDocGenProcessor</annotationProcessor>
                 </annotationProcessors>
                 <compilerArgs>
-                  <arg>-Adocgen.output=${asciidoc.dir}/java</arg>
+                  <arg>-Adocgen.output=${asciidoc.dir}</arg>
                 </compilerArgs>
               </configuration>
             </execution>
