@@ -10,7 +10,7 @@ Supports basic auth, client configuration (for ssl, etc...), local cache, signat
 
 ## Documentation
 
-Follow this link:src/main/asciidoc/java/index.adoc[link].
+Follow this link:https://github.com/vert-x3/vertx-http-service-factory/blob/master/src/main/asciidoc/index.adoc[link].
 
 == Todo
 
