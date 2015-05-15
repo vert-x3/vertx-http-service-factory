@@ -21,12 +21,15 @@ import org.bouncycastle.openpgp.PGPSignature;
 import java.io.File;
 import java.io.FileInputStream;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URLEncoder;
 import java.nio.file.Files;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.jar.Attributes;
 import java.util.jar.JarFile;
@@ -174,7 +177,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
             }
           };
 
-          doRequest(keyserverClient, publicKeyFile, publicKeyURI, null, null, false, unmarshallerFactory, ar2 -> {
+          doRequest(keyserverClient, publicKeyFile, publicKeyURI, null, null, false, unmarshallerFactory, new HashSet<>(), ar2 -> {
             if (ar2.succeeded()) {
               try {
                 PGPPublicKey publicKey = PGPHelper.getPublicKey(Files.readAllBytes(ar2.result().toPath()), signature.getKeyID());
@@ -220,6 +223,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
    * @param password the optional password used for basic auth
    * @param doAuth whether to perform authentication or not
    * @param unmarshallerFactory the unmarshaller factory
+   * @param history the previous urls for detecting redirection loops
    * @param handler the result handler
    */
   private void doRequest(
@@ -230,6 +234,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
       String password,
       boolean doAuth,
       Function<String, Function<Buffer, Buffer>> unmarshallerFactory,
+      Set<URI> history,
       Handler<AsyncResult<File>> handler) {
     if (file.exists() && file.isFile()) {
       handler.handle(Future.succeededFuture(file));
@@ -263,78 +268,111 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
     });
     req.handler(resp -> {
       int status = resp.statusCode();
-      if (status == 200) {
-        resp.pause();
-        File parentFile = file.getParentFile();
-        if (!parentFile.exists()) {
-          parentFile.mkdirs();
-        }
-        vertx.fileSystem().open(file.getPath(), new OpenOptions().setCreate(true), ar2 -> {
-          if (ar2.succeeded()) {
-            resp.resume();
-            AsyncFile result = ar2.result();
-            String contentType = resp.getHeader("Content-Type");
-            int index = contentType.indexOf(";");
-            String mediaType = index > -1 ? contentType.substring(0, index) : contentType;
-            Function<Buffer, Buffer> unmarshaller = unmarshallerFactory.apply(mediaType);
-            Pump pump = Pump.pump(resp, new WriteStream<Buffer>() {
-              @Override
-              public WriteStream<Buffer> exceptionHandler(Handler<Throwable> handler) {
-                result.exceptionHandler(handler);
-                return this;
-              }
-              @Override
-              public WriteStream<Buffer> write(Buffer data) {
-                data = unmarshaller.apply(data);
-                if (data != null) {
-                  result.write(data);
+      switch (resp.statusCode()) {
+        case 200: {
+          resp.pause();
+          File parentFile = file.getParentFile();
+          if (!parentFile.exists()) {
+            parentFile.mkdirs();
+          }
+          vertx.fileSystem().open(file.getPath(), new OpenOptions().setCreate(true), ar2 -> {
+            if (ar2.succeeded()) {
+              resp.resume();
+              AsyncFile result = ar2.result();
+              String contentType = resp.getHeader("Content-Type");
+              int index = contentType.indexOf(";");
+              String mediaType = index > -1 ? contentType.substring(0, index) : contentType;
+              Function<Buffer, Buffer> unmarshaller = unmarshallerFactory.apply(mediaType);
+              Pump pump = Pump.pump(resp, new WriteStream<Buffer>() {
+                @Override
+                public WriteStream<Buffer> exceptionHandler(Handler<Throwable> handler) {
+                  result.exceptionHandler(handler);
+                  return this;
                 }
-                return this;
-              }
-              @Override
-              public WriteStream<Buffer> setWriteQueueMaxSize(int maxSize) {
-                result.setWriteQueueMaxSize(maxSize);
-                return this;
-              }
-              @Override
-              public boolean writeQueueFull() {
-                return result.writeQueueFull();
-              }
-              @Override
-              public WriteStream<Buffer> drainHandler(Handler<Void> handler) {
-                result.drainHandler(handler);
-                return this;
-              }
-            });
-            pump.start();
-            resp.exceptionHandler(err -> {
-              handler.handle(Future.failedFuture(ar2.cause()));
-            });
-            resp.endHandler(v1 -> {
-              Buffer last = unmarshaller.apply(null);
-              if (last != null) {
-                result.write(last);
-              }
-              result.close(v2 -> {
-                if (v2.succeeded()) {
-                  handler.handle(Future.succeededFuture(file));
-                } else {
-                  handler.handle(Future.failedFuture(v2.cause()));
+                @Override
+                public WriteStream<Buffer> write(Buffer data) {
+                  data = unmarshaller.apply(data);
+                  if (data != null) {
+                    result.write(data);
+                  }
+                  return this;
+                }
+                @Override
+                public WriteStream<Buffer> setWriteQueueMaxSize(int maxSize) {
+                  result.setWriteQueueMaxSize(maxSize);
+                  return this;
+                }
+                @Override
+                public boolean writeQueueFull() {
+                  return result.writeQueueFull();
+                }
+                @Override
+                public WriteStream<Buffer> drainHandler(Handler<Void> handler) {
+                  result.drainHandler(handler);
+                  return this;
                 }
               });
-            });
-          } else {
-            handler.handle(Future.failedFuture(ar2.cause()));
-          }
-        });
-      } else if (status == 401) {
-        if (prefix().equals("https") && resp.getHeader("WWW-Authenticate") != null && username != null && password != null) {
-          doRequest(client, file, url, username, password, true, unmarshallerFactory, handler);
-          return;
+              pump.start();
+              resp.exceptionHandler(err -> {
+                handler.handle(Future.failedFuture(ar2.cause()));
+              });
+              resp.endHandler(v1 -> {
+                Buffer last = unmarshaller.apply(null);
+                if (last != null) {
+                  result.write(last);
+                }
+                result.close(v2 -> {
+                  if (v2.succeeded()) {
+                    handler.handle(Future.succeededFuture(file));
+                  } else {
+                    handler.handle(Future.failedFuture(v2.cause()));
+                  }
+                });
+              });
+            } else {
+              handler.handle(Future.failedFuture(ar2.cause()));
+            }
+          });
+          break;
         }
-        handler.handle(Future.failedFuture(new Exception("Unauthorized")));
-      } else {
-        handler.handle(Future.failedFuture(new Exception("Cannot get file status:" + status)));
+        case 301:
+        case 302:
+        case 303:
+        case 308: {
+          // Redirect
+          String location = resp.headers().get("location");
+          if (location == null) {
+            handler.handle(Future.failedFuture("HTTP redirect with no location header"));
+          } else {
+            URI redirectURI;
+            try {
+              redirectURI = new URI(location);
+            } catch (URISyntaxException e) {
+              handler.handle(Future.failedFuture("Invalid redirect URI: " + location));
+              return;
+            }
+            if (history.contains(redirectURI)) {
+              handler.handle(Future.failedFuture(new Exception("Server redirected to a previous uri " + redirectURI)));
+              return;
+            }
+            Set<URI> nextHistory = new HashSet<>(history);
+            nextHistory.add(url);
+            doRequest(client, file, redirectURI, username, password, doAuth, unmarshallerFactory, nextHistory, handler);
+          }
+          break;
+        }
+        case 401: {
+          if (prefix().equals("https") && resp.getHeader("WWW-Authenticate") != null && username != null && password != null) {
+            doRequest(client, file, url, username, password, true, unmarshallerFactory, history, handler);
+            return;
+          }
+          handler.handle(Future.failedFuture(new Exception("Unauthorized")));
+          break;
+        }
+        default: {
+          handler.handle(Future.failedFuture(new Exception("Cannot get file status:" + status)));
+          break;
+        }
       }
     });
     req.end();
@@ -353,11 +391,11 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
 
   protected void doRequest(HttpClient client, File file, URI url, File signatureFile,
                            URI signatureURL, Handler<AsyncResult<Result>> handler) {
-    doRequest(client, file, url, username, password, false, ct -> Function.identity(), ar1 -> {
+    doRequest(client, file, url, username, password, false, ct -> Function.identity(), new HashSet<>(), ar1 -> {
       if (ar1.succeeded()) {
         // Now get the signature if any
         if (validationPolicy != ValidationPolicy.NONE) {
-          doRequest(client, signatureFile, signatureURL, username, password, false, ct -> Function.identity(), ar3 -> {
+          doRequest(client, signatureFile, signatureURL, username, password, false, ct -> Function.identity(), new HashSet<>(), ar3 -> {
             if (ar3.succeeded()) {
               handler.handle(Future.succeededFuture(new Result(ar1.result(), ar3.result())));
             } else {

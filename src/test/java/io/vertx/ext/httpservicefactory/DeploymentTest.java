@@ -6,6 +6,7 @@ import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.http.HttpServerRequest;
+import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.net.JksOptions;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
@@ -127,6 +128,61 @@ public class DeploymentTest {
           });
         })
     );
+  }
+
+  @Test
+  public void testRedirect301(TestContext context) {
+    testRedirect(context, 301);
+  }
+
+  @Test
+  public void testRedirect302(TestContext context) {
+    testRedirect(context, 301);
+  }
+
+  @Test
+  public void testRedirect303(TestContext context) {
+    testRedirect(context, 301);
+  }
+
+  @Test
+  public void testRedirect308(TestContext context) {
+    testRedirect(context, 301);
+  }
+
+  private void testRedirect(TestContext context, int responseStatus) {
+    vertx = Vertx.vertx();
+    HttpServer redirectServer = vertx.createHttpServer();
+    redirectServer.requestHandler(req -> {
+      HttpServerResponse resp = req.response();
+      resp.setStatusCode(responseStatus);
+      resp.putHeader("Location", "http://localhost:8080/the_verticle.zip");
+      resp.end();
+    });
+    HttpServer server = new RepoBuilder().setVerticle(verticleWithMain).build();
+    redirectServer.listen(8081, context.asyncAssertSuccess(r -> {
+      server.listen(
+          8080,
+          context.asyncAssertSuccess(s -> {
+            vertx.deployVerticle("http://localhost:8081/the_verticle.zip", context.asyncAssertSuccess());
+          })
+      );
+    }));
+  }
+
+  @Test
+  public void testPreventRedirectLoop(TestContext context) {
+    vertx = Vertx.vertx();
+    HttpServer redirectServer = vertx.createHttpServer();
+    redirectServer.requestHandler(req -> {
+      HttpServerResponse resp = req.response();
+      resp.setStatusCode(301);
+      resp.putHeader("Location", "http://localhost:8080/the_verticle.zip");
+      resp.end();
+    });
+    redirectServer.listen(8080, context.asyncAssertSuccess(r -> {
+      vertx.deployVerticle("http://localhost:8080/the_verticle.zip", context.asyncAssertFailure());
+    }));
   }
 
   @Test
