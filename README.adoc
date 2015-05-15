@@ -6,7 +6,7 @@ A service factory that deploys from HTTP servers
 vertx run https://myserver.net/myverticle.zip
 ----
 
-Supports basic auth, client configuration (for ssl, etc...), local cache, signature verification
+Supports basic auth, client configuration (for ssl, etc...), proxy server support, local cache, signature verification
 
 ## Documentation
 
@@ -15,5 +15,3 @@ Follow this link:https://github.com/vert-x3/vertx-http-service-factory/blob/mast
 == Todo
 
 - support keyID while list
-- better http response code handling (redirection port from Vert.x 2)
-- proxy support (port from Vert.x 2)
