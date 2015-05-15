@@ -161,7 +161,10 @@
  *
  * If you have configured the GPG signature, you will have also the signature file _https://bintray.com/artifact/download/vietj/testgenrepo/helloworld.zip.asc_.
  * It will be by default downloaded and validated with http://pool.sks-keyservers.net:11371/pks/lookup?op=vindex&fingerprint=on&search=0x379CE192D401AB61[Bintray's public key]
-
+ *
+ * ****
+ * Of course you can use your own keys for signing the files.
+ * ****
  *
  * We can run this service with:
  *
