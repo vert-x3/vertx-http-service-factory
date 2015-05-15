@@ -212,7 +212,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
    * @param url the resource url
    * @param username the optional username used for basic auth
    * @param password the optional password used for basic auth
-   * @param auth whether to perform authentication or not
+   * @param doAuth whether to perform authentication or not
    * @param unmarshallerFactory the unmarshaller factory
    * @param handler the result handler
    */
@@ -222,7 +222,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
       URI url,
       String username,
       String password,
-      boolean auth,
+      boolean doAuth,
       Function<String, Function<Buffer, Buffer>> unmarshallerFactory,
       Handler<AsyncResult<File>> handler) {
     if (file.exists() && file.isFile()) {
@@ -242,7 +242,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
       }
     }
     HttpClientRequest req = client.get(port, url.getHost(), requestURI);
-    if (auth && username != null && password != null) {
+    if (doAuth && username != null && password != null) {
       req.putHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString((username + ":" + password).getBytes()));
     }
     req.exceptionHandler(err -> {
