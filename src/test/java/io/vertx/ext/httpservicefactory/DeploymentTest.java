@@ -10,6 +10,9 @@ import io.vertx.core.net.JksOptions;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
+import org.eclipse.jetty.proxy.ProxyServlet;
+import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.servlet.ServletHandler;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -41,6 +44,7 @@ public class DeploymentTest {
   private static Buffer validatingKey_json;
   private static Buffer anotherKey;
   private Vertx vertx;
+  private Server proxyServer;
 
   @BeforeClass
   public static void init() throws Exception {
@@ -198,6 +202,25 @@ public class DeploymentTest {
             context.assertTrue(ar.failed());
             async.complete();
           });
+        })
+    );
+  }
+
+  @Test
+  public void testDeployUsingProxy(TestContext context) throws Exception {
+    proxyServer = new Server(8081);
+    ServletHandler handler = new ServletHandler();
+    proxyServer.setHandler(handler);
+    handler.addServletWithMapping(ProxyServlet.class, "/*").setInitParameter("maxThreads", "10");
+    proxyServer.start();
+    System.setProperty(HttpServiceFactory.PROXY_HOST_PROPERTY, "localhost");
+    System.setProperty(HttpServiceFactory.PROXY_PORT_PROPERTY, "8081");
+    vertx = Vertx.vertx();
+    HttpServer server = new RepoBuilder().setVerticle(verticleWithMain).build();
+    server.listen(
+        8080,
+        context.asyncAssertSuccess(s -> {
+          vertx.deployVerticle("http://localhost:8080/the_verticle.zip", context.asyncAssertSuccess());
         })
     );
   }
@@ -379,7 +402,6 @@ public class DeploymentTest {
         )));
   }
 
-
   private void testValidationDeploymentFailed(
       TestContext context,
       ValidationPolicy validationPolicy,
@@ -403,8 +425,16 @@ public class DeploymentTest {
     System.clearProperty(HttpServiceFactory.VALIDATION_POLICY);
     System.clearProperty(HttpServiceFactory.AUTH_PASSWORD_PROPERTY);
     System.clearProperty(HttpServiceFactory.AUTH_USERNAME_PROPERTY);
+    System.clearProperty(HttpServiceFactory.PROXY_HOST_PROPERTY);
+    System.clearProperty(HttpServiceFactory.PROXY_PORT_PROPERTY);
     if (vertx != null) {
       vertx.close(context.asyncAssertSuccess());
+    }
+    if (proxyServer != null) {
+      try {
+        proxyServer.stop();
+      } catch (Exception ignore) {
+      }
     }
   }
 

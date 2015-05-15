@@ -75,6 +75,11 @@
  * Authentication is done only for services (i.e basic authentication will not be done for key servers) and only using
  * an https connection.
  *
+ * === Proxy server configuration
+ *
+ * The http client can be configured to support a proxy server with the _vertx.httpServiceFactory.proxyHost_ and
+ * _vertx.httpServiceFactory.proxyPort_ system properties.
+ *
  * == Public key servers
  *
  * Signed artifacts signatures are verifed using a public key, public key are retrieved from a public key server.
@@ -123,6 +128,7 @@
  *
  * The default cache directory _.vertx_ can be set to a specific location with the _vertx.httpServiceFactory.cacheDir_
  * system property.
+ *
  */
 @Document(fileName = "index.adoc")
 package io.vertx.ext.httpservicefactory;

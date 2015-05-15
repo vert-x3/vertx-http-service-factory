@@ -42,6 +42,8 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
   public static final String HTTPS_CLIENT_OPTIONS_PROPERTY = "vertx.httpServiceFactory.httpsClientOptions";
   public static final String AUTH_USERNAME_PROPERTY = "vertx.httpServiceFactory.authUsername";
   public static final String AUTH_PASSWORD_PROPERTY = "vertx.httpServiceFactory.authPassword";
+  public static final String PROXY_HOST_PROPERTY = "vertx.httpServiceFactory.proxyHost";
+  public static final String PROXY_PORT_PROPERTY = "vertx.httpServiceFactory.proxyPort";
   public static final String KEYSERVER_URI_TEMPLATE = "vertx.httpServiceFactory.keyserverURITemplate";
   public static final String VALIDATION_POLICY = "vertx.httpServiceFactory.validationPolicy";
 
@@ -52,6 +54,8 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
   private File cacheDir;
   private String username;
   private String password;
+  private String proxyHost;
+  private int proxyPort;
   private String keyserverURITemplate;
   private ValidationPolicy validationPolicy;
   private HttpClientOptions options;
@@ -63,6 +67,8 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
     validationPolicy = ValidationPolicy.valueOf(System.getProperty(VALIDATION_POLICY, ValidationPolicy.VERIFY.toString()).toUpperCase());
     username = System.getProperty(AUTH_USERNAME_PROPERTY);
     password = System.getProperty(AUTH_PASSWORD_PROPERTY);
+    proxyHost = System.getProperty(PROXY_HOST_PROPERTY);
+    proxyPort = Integer.parseInt(System.getProperty(PROXY_PORT_PROPERTY, "-1"));
     keyserverURITemplate = System.getProperty(KEYSERVER_URI_TEMPLATE, "http://pool.sks-keyservers.net:11371/pks/lookup?op=get&options=mr&search=0x%016X");
     this.vertx = vertx;
   }
@@ -241,7 +247,13 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
         port = 443;
       }
     }
-    HttpClientRequest req = client.get(port, url.getHost(), requestURI);
+    HttpClientRequest req;
+    if (proxyHost == null) {
+      req = client.get(port, url.getHost(), requestURI);
+    } else {
+      req = client.get(proxyPort, proxyHost, url.toString());
+      req.putHeader("host", url.getHost());
+    }
     if (doAuth && username != null && password != null) {
       req.putHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString((username + ":" + password).getBytes()));
     }
