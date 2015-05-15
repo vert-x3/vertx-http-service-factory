@@ -1,7 +1,10 @@
 /**
  * = Vert.x Http Service Factory
  *
- * The http service factory is a Vert.x service factory for deploying services from an http server.
+ * The http service factory is a Vert.x service factory for deploying services from an http server. It it an alternative
+ * to the Maven Service Factory for using services hosted on a plain http server, e.g a JavaScript service zipped
+ * and hosted somewhere. Unlike the Maven Service Factory, the Http Service Factory does not provide any kind of
+ * classpath dependency resolution.
  *
  * ----
  * vertx run https://myserver.net/myverticle.zip::my-service
@@ -129,6 +132,44 @@
  * The default cache directory _.vertx_ can be set to a specific location with the _vertx.httpServiceFactory.cacheDir_
  * system property.
  *
+ * == Examples
+ *
+ * === Bintray
+ *
+ * Bintray is a distribution platform that can be used for hosting files.
+ *
+ * === Service zip
+ *
+ * ----
+ * > echo 'console.log("hello world")' > helloworld.js
+ * > echo '{"main":"helloworld.js"}' > helloworld.json
+ * > zip helloworld.zip helloworld.json helloworld.js
+ * ----
+ *
+ * === Bintray hosting
+ *
+ * Assuming you have a Bintray account:
+ *
+ * - create a Bintray repository with the _generic_ type, for instance _testgenrepo_
+ * - in this repository create a package, for instance _testpkg_
+ * - optionally edit the package and check the _GPG sign uploaded files using Bintray's public /private key pair._
+ * - in this package create a version, for instance _1.0_
+ * - now upload the _helloworld.zip_ file
+ * - publish the files
+ *
+ * The file are now hosted with an URL like : _https://bintray.com/artifact/download/vietj/testgenrepo/helloworld.zip_
+ *
+ * If you have configured the GPG signature, you will have also the signature file _https://bintray.com/artifact/download/vietj/testgenrepo/helloworld.zip.asc_.
+ * It will be by default downloaded and validated with http://pool.sks-keyservers.net:11371/pks/lookup?op=vindex&fingerprint=on&search=0x379CE192D401AB61[Bintray's public key]
+
+ *
+ * We can run this service with:
+ *
+ * ----
+ * vertx run https://bintray.com/artifact/download/vietj/testgenrepo/helloworld.zip::helloworld
+ % Hello World
+ * Succeeded in deploying verticle
+ * ----
  */
 @Document(fileName = "index.adoc")
 package io.vertx.ext.httpservicefactory;
