@@ -257,6 +257,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
     if (doAuth && username != null && password != null) {
       req.putHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString((username + ":" + password).getBytes()));
     }
+    req.putHeader("user-agent", "Vert.x Http Service Factory");
     req.exceptionHandler(err -> {
       handler.handle(Future.failedFuture(err));
     });
