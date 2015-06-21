@@ -31,6 +31,7 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.jar.Attributes;
 import java.util.jar.JarFile;
@@ -317,21 +318,26 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
                 }
               });
               pump.start();
-              resp.exceptionHandler(err -> {
-                handler.handle(Future.failedFuture(ar2.cause()));
-              });
+              AtomicReference<Throwable> err = new AtomicReference<>();
+              // Commented as now we are always getting an exception when connection close
+//              resp.exceptionHandler(err::set);
               resp.endHandler(v1 -> {
-                Buffer last = unmarshaller.apply(null);
-                if (last != null) {
-                  result.write(last);
-                }
-                result.close(v2 -> {
-                  if (v2.succeeded()) {
-                    handler.handle(Future.succeededFuture(file));
-                  } else {
-                    handler.handle(Future.failedFuture(v2.cause()));
+                if (err.get() == null) {
+                  Buffer last = unmarshaller.apply(null);
+                  if (last != null) {
+                    result.write(last);
                   }
-                });
+                  result.close(v2 -> {
+                    if (v2.succeeded()) {
+                      handler.handle(Future.succeededFuture(file));
+                    } else {
+                      handler.handle(Future.failedFuture(v2.cause()));
+                    }
+                  });
+                } else {
+                  result.close();
+                  handler.handle(Future.failedFuture(err.get()));
+                }
               });
             } else {
               handler.handle(Future.failedFuture(ar2.cause()));
