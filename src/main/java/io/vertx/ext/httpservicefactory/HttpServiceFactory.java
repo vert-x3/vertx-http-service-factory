@@ -26,6 +26,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URLEncoder;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.HashSet;
@@ -180,7 +181,10 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
           doRequest(keyserverClient, publicKeyFile, publicKeyURI, null, null, false, unmarshallerFactory, new HashSet<>(), ar2 -> {
             if (ar2.succeeded()) {
               try {
-                PGPPublicKey publicKey = PGPHelper.getPublicKey(Files.readAllBytes(ar2.result().toPath()), signature.getKeyID());
+                long keyID = signature.getKeyID();
+                File file = ar2.result();
+                Path path = file.toPath();
+                PGPPublicKey publicKey = PGPHelper.getPublicKey(Files.readAllBytes(path), keyID);
                 if (publicKey != null) {
                   FileInputStream f = new FileInputStream(ar.result().deployment);
                   boolean verified = PGPHelper.verifySignature(f, new FileInputStream(ar.result().signature), publicKey);
