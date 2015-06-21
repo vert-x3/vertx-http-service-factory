@@ -12,8 +12,6 @@ import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.json.JsonObject;
-import io.vertx.core.streams.Pump;
-import io.vertx.core.streams.WriteStream;
 import io.vertx.service.ServiceVerticleFactory;
 import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPSignature;
@@ -31,8 +29,8 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiFunction;
 import java.util.jar.Attributes;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
@@ -160,22 +158,14 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
             keyserverClient = client;
           }
 
-          Function<String, Function<Buffer, Buffer>> unmarshallerFactory = mediaType -> {
+          BiFunction<String, Buffer, Buffer> unmarshallerFactory = (mediaType, buf) -> {
             switch (mediaType) {
               case "application/json":
-                Buffer buffer = Buffer.buffer();
-                return buf -> {
-                  if (buf == null) {
-                    JsonObject json = new JsonObject(buffer.toString());
-                    return Buffer.buffer(json.getJsonArray("keys").getJsonObject(0).getString("bundle"));
-                  } else {
-                    buffer.appendBuffer(buf);
-                    return null;
-                  }
-                };
+                JsonObject json = new JsonObject(buf.toString());
+                return Buffer.buffer(json.getJsonArray("keys").getJsonObject(0).getString("bundle"));
               case "application/pgp-keys":
               default:
-                return Function.identity();
+                return buf;
             }
           };
 
@@ -227,7 +217,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
    * @param username the optional username used for basic auth
    * @param password the optional password used for basic auth
    * @param doAuth whether to perform authentication or not
-   * @param unmarshallerFactory the unmarshaller factory
+   * @param unmarshaller the unmarshaller
    * @param history the previous urls for detecting redirection loops
    * @param handler the result handler
    */
@@ -238,7 +228,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
       String username,
       String password,
       boolean doAuth,
-      Function<String, Function<Buffer, Buffer>> unmarshallerFactory,
+      BiFunction<String, Buffer, Buffer> unmarshaller,
       Set<URI> history,
       Handler<AsyncResult<File>> handler) {
     if (file.exists() && file.isFile()) {
@@ -275,73 +265,45 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
       int status = resp.statusCode();
       switch (resp.statusCode()) {
         case 200: {
-          resp.pause();
-          File parentFile = file.getParentFile();
-          if (!parentFile.exists()) {
-            parentFile.mkdirs();
-          }
-          vertx.fileSystem().open(file.getPath(), new OpenOptions().setCreate(true), ar2 -> {
-            if (ar2.succeeded()) {
-              resp.resume();
-              AsyncFile result = ar2.result();
-              String contentType = resp.getHeader("Content-Type");
-              int index = contentType.indexOf(";");
-              String mediaType = index > -1 ? contentType.substring(0, index) : contentType;
-              Function<Buffer, Buffer> unmarshaller = unmarshallerFactory.apply(mediaType);
-              Pump pump = Pump.pump(resp, new WriteStream<Buffer>() {
-                @Override
-                public WriteStream<Buffer> exceptionHandler(Handler<Throwable> handler) {
-                  result.exceptionHandler(handler);
-                  return this;
-                }
-                @Override
-                public WriteStream<Buffer> write(Buffer data) {
-                  data = unmarshaller.apply(data);
-                  if (data != null) {
-                    result.write(data);
-                  }
-                  return this;
-                }
-                @Override
-                public WriteStream<Buffer> setWriteQueueMaxSize(int maxSize) {
-                  result.setWriteQueueMaxSize(maxSize);
-                  return this;
-                }
-                @Override
-                public boolean writeQueueFull() {
-                  return result.writeQueueFull();
-                }
-                @Override
-                public WriteStream<Buffer> drainHandler(Handler<Void> handler) {
-                  result.drainHandler(handler);
-                  return this;
-                }
-              });
-              pump.start();
-              AtomicReference<Throwable> err = new AtomicReference<>();
-              // Commented as now we are always getting an exception when connection close
-//              resp.exceptionHandler(err::set);
-              resp.endHandler(v1 -> {
-                if (err.get() == null) {
-                  Buffer last = unmarshaller.apply(null);
-                  if (last != null) {
-                    result.write(last);
-                  }
-                  result.close(v2 -> {
-                    if (v2.succeeded()) {
-                      handler.handle(Future.succeededFuture(file));
-                    } else {
-                      handler.handle(Future.failedFuture(v2.cause()));
-                    }
-                  });
-                } else {
-                  result.close();
-                  handler.handle(Future.failedFuture(err.get()));
-                }
-              });
-            } else {
-              handler.handle(Future.failedFuture(ar2.cause()));
+          String contentType = resp.getHeader("Content-Type");
+          int index = contentType.indexOf(";");
+          String mediaType = index > -1 ? contentType.substring(0, index) : contentType;
+          AtomicBoolean done = new AtomicBoolean();
+          resp.exceptionHandler(err -> {
+            if (done.compareAndSet(false, true)) {
+              handler.handle(Future.failedFuture(err));
             }
+          });
+          resp.bodyHandler(body -> {
+            if (!done.compareAndSet(false, true)) {
+              return;
+            }
+            File parentFile = file.getParentFile();
+            if (!parentFile.exists()) {
+              parentFile.mkdirs(); // Handle that
+            }
+            Buffer data;
+            try {
+              data = unmarshaller.apply(mediaType, body);
+            } catch (Exception e) {
+              handler.handle(Future.failedFuture(e));
+              return;
+            }
+            vertx.fileSystem().open(file.getPath(), new OpenOptions().setCreate(true), ar2 -> {
+              if (ar2.succeeded()) {
+                AsyncFile result = ar2.result();
+                result.write(data);
+                result.close(v2 -> {
+                  if (v2.succeeded()) {
+                    handler.handle(Future.succeededFuture(file));
+                  } else {
+                    handler.handle(Future.failedFuture(v2.cause()));
+                  }
+                });
+              } else {
+                handler.handle(Future.failedFuture(ar2.cause()));
+              }
+            });
           });
           break;
         }
@@ -367,13 +329,13 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
             }
             Set<URI> nextHistory = new HashSet<>(history);
             nextHistory.add(url);
-            doRequest(client, file, redirectURI, username, password, doAuth, unmarshallerFactory, nextHistory, handler);
+            doRequest(client, file, redirectURI, username, password, doAuth, unmarshaller, nextHistory, handler);
           }
           break;
         }
         case 401: {
           if (prefix().equals("https") && resp.getHeader("WWW-Authenticate") != null && username != null && password != null) {
-            doRequest(client, file, url, username, password, true, unmarshallerFactory, history, handler);
+            doRequest(client, file, url, username, password, true, unmarshaller, history, handler);
             return;
           }
           handler.handle(Future.failedFuture(new Exception("Unauthorized")));
@@ -401,11 +363,11 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
 
   protected void doRequest(HttpClient client, File file, URI url, File signatureFile,
                            URI signatureURL, Handler<AsyncResult<Result>> handler) {
-    doRequest(client, file, url, username, password, false, ct -> Function.identity(), new HashSet<>(), ar1 -> {
+    doRequest(client, file, url, username, password, false, (mediatype,buf) -> buf, new HashSet<>(), ar1 -> {
       if (ar1.succeeded()) {
         // Now get the signature if any
         if (validationPolicy != ValidationPolicy.NONE) {
-          doRequest(client, signatureFile, signatureURL, username, password, false, ct -> Function.identity(), new HashSet<>(), ar3 -> {
+          doRequest(client, signatureFile, signatureURL, username, password, false, (mediatype,buf) -> buf, new HashSet<>(), ar3 -> {
             if (ar3.succeeded()) {
               handler.handle(Future.succeededFuture(new Result(ar1.result(), ar3.result())));
             } else {
