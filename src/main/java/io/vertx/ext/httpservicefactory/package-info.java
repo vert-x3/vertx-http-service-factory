@@ -4,13 +4,13 @@
  * The http service factory is a Vert.x service factory for deploying services from an http server. It it an alternative
  * to the Maven Service Factory for using services hosted on a plain http server, e.g a JavaScript service zipped
  * and hosted somewhere. Unlike the Maven Service Factory, the Http Service Factory does not provide any kind of
- * classpath dependency resolution.
+ * classpath dependency resolution. To use this feature be sure that `{maven-groupId}:{maven-artifactId}:{maven-version}` is in your classpath.
  *
  * ----
  * vertx run https://myserver.net/myverticle.zip::my-service
  * ----
  *
- * Although it looks like an http URL, it is a verticle identifer with a factory bound to the _https_ prefix (_http_
+ * Although it looks like an http URL, it is a verticle identifier with a factory bound to the _https_ prefix (_http_
  * also supported).
  *
  * The service identifier is made up of the suffix to form an _http_ URL or the archive that contains the service,
