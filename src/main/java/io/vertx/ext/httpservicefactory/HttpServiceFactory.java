@@ -1,10 +1,6 @@
 package io.vertx.ext.httpservicefactory;
 
-import io.vertx.core.AsyncResult;
-import io.vertx.core.DeploymentOptions;
-import io.vertx.core.Future;
-import io.vertx.core.Handler;
-import io.vertx.core.Vertx;
+import io.vertx.core.*;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.file.AsyncFile;
 import io.vertx.core.file.OpenOptions;
@@ -18,11 +14,7 @@ import org.bouncycastle.openpgp.PGPSignature;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.net.URLEncoder;
+import java.net.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
@@ -146,13 +138,13 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
             publicKeyURI = new URI(uri);
             publicKeyFile = new File(cacheDir, URLEncoder.encode(publicKeyURI.toString(), "UTF-8"));
           } catch (Exception e) {
-            client.close();
+            closeQuietly(client);
             resolution.fail(e);
             return;
           }
           HttpClient keyserverClient;
           if (!publicKeyURI.getScheme().equals(prefix())) {
-            client.close();
+            closeQuietly(client);
             keyserverClient = vertx.createHttpClient(createHttpClientOptions(publicKeyURI.getScheme()));
           } else {
             keyserverClient = client;
@@ -188,15 +180,15 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
               } catch (Exception e) {
                 resolution.fail(e);
               } finally {
-                keyserverClient.close();
+                closeQuietly(keyserverClient);
               }
             } else {
-              keyserverClient.close();
+              closeQuietly(keyserverClient);
               resolution.fail(ar2.cause());
             }
           });
         } else {
-          client.close();
+          closeQuietly(client);
           deploy(deploymentFile, identifier, serviceName, deploymentOptions, classLoader, resolution);
         }
       } else {
@@ -211,15 +203,15 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
    * to unmarshall and finally with a null buffer to signal the end of the unmarshalled data. It can return a buffer
    * or a null value.
    *
-   * @param client the http client
-   * @param file the file where to save the content
-   * @param url the resource url
-   * @param username the optional username used for basic auth
-   * @param password the optional password used for basic auth
-   * @param doAuth whether to perform authentication or not
+   * @param client       the http client
+   * @param file         the file where to save the content
+   * @param url          the resource url
+   * @param username     the optional username used for basic auth
+   * @param password     the optional password used for basic auth
+   * @param doAuth       whether to perform authentication or not
    * @param unmarshaller the unmarshaller
-   * @param history the previous urls for detecting redirection loops
-   * @param handler the result handler
+   * @param history      the previous urls for detecting redirection loops
+   * @param handler      the result handler
    */
   private void doRequest(
       HttpClient client,
@@ -363,11 +355,11 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
 
   protected void doRequest(HttpClient client, File file, URI url, File signatureFile,
                            URI signatureURL, Handler<AsyncResult<Result>> handler) {
-    doRequest(client, file, url, username, password, false, (mediatype,buf) -> buf, new HashSet<>(), ar1 -> {
+    doRequest(client, file, url, username, password, false, (mediatype, buf) -> buf, new HashSet<>(), ar1 -> {
       if (ar1.succeeded()) {
         // Now get the signature if any
         if (validationPolicy != ValidationPolicy.NONE) {
-          doRequest(client, signatureFile, signatureURL, username, password, false, (mediatype,buf) -> buf, new HashSet<>(), ar3 -> {
+          doRequest(client, signatureFile, signatureURL, username, password, false, (mediatype, buf) -> buf, new HashSet<>(), ar3 -> {
             if (ar3.succeeded()) {
               handler.handle(Future.succeededFuture(new Result(ar1.result(), ar3.result())));
             } else {
@@ -408,6 +400,15 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
       super.resolve(serviceIdentifer, deploymentOptions, urlc, resolution);
     } catch (Exception e) {
       resolution.fail(e);
+    }
+  }
+
+  private void closeQuietly(HttpClient client) {
+    try {
+      client.close();
+    } catch (Exception e) {
+      // We ignore the exceptions.
+      // If the client was already closed, it throws an IllegalStateException.
     }
   }
 }
