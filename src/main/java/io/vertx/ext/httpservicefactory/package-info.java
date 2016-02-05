@@ -17,7 +17,7 @@
  * followed by a double colon `::` and a service name.
  *
  * The service name is used to find the service descriptor file inside the artifact which is named by the service name with
- * a `.json` extension. This is explained in the link:https://github.com/vert-x3/vertx-service-factory[Service Verticle Factory]
+ * a `.json` extension. This is explained in the link:http://vertx.io/docs/vertx-service-factory/java[Service Verticle Factory]
  * documentation.
  *
  * For example, to deploy a service that exists in an hosted at `https://myserver.net/myverticle.zip` called `my-service`
@@ -27,7 +27,7 @@
  * `https://myserver.net/myverticle.zip`.
  *
  * It then constructs a classpath including this archive and creates a classloader with that classpath in order
- * to load the service using the standard link:https://github.com/vert-x3/vertx-service-factory[Service Verticle Factory].
+ * to load the service using the standard link:http://vertx.io/docs/vertx-service-factory/java[Service Verticle Factory].
  *
  * The Service Verticle Factory will look for a descriptor file called `my-service.json on the constructed classpath to
  * actually load the service.
