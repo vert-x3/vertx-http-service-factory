@@ -23,7 +23,7 @@
   <parent>
     <groupId>io.vertx</groupId>
     <artifactId>vertx-parent</artifactId>
-    <version>8</version>
+    <version>9</version>
   </parent>
 
   <artifactId>vertx-http-service-factory</artifactId>
@@ -60,7 +60,7 @@
     <dependency>
       <groupId>org.bouncycastle</groupId>
       <artifactId>bcpg-jdk15on</artifactId>
-      <version>1.52</version>
+      <version>1.54</version>
     </dependency>
     <dependency>
       <groupId>io.vertx</groupId>
@@ -76,7 +76,7 @@
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
-      <version>4.11</version>
+      <version>4.12</version>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -87,19 +87,19 @@
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-server</artifactId>
-      <version>9.3.2.v20150730</version>
+      <version>9.3.7.v20160115</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-servlet</artifactId>
-      <version>9.3.2.v20150730</version>
+      <version>9.3.7.v20160115</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-proxy</artifactId>
-      <version>9.3.2.v20150730</version>
+      <version>9.3.7.v20160115</version>
       <scope>test</scope>
     </dependency>
 
@@ -152,15 +152,6 @@
       <plugin>
         <groupId>org.asciidoctor</groupId>
         <artifactId>asciidoctor-maven-plugin</artifactId>
-        <version>1.5.2</version>
-        <configuration>
-          <sourceDirectory>${asciidoc.dir}</sourceDirectory>
-          <outputDirectory>${project.build.directory}/docs/${project.artifactId}</outputDirectory>
-          <preserveDirectories>true</preserveDirectories>
-          <relativeBaseDir>true</relativeBaseDir>
-          <backend>html</backend>
-          <doctype>book</doctype>
-        </configuration>
         <executions>
           <execution>
             <goals>
