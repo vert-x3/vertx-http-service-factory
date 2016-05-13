@@ -102,6 +102,12 @@
       <version>9.3.7.v20160115</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>19.0</version>
+      <scope>test</scope>
+    </dependency>
 
   </dependencies>
 
@@ -128,6 +134,14 @@
             </execution>
           </executions>
         </plugin>
+        <plugin>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <configuration>
+            <classpathDependencyExcludes>
+              <exclude>com.google.guava:guava</exclude>
+            </classpathDependencyExcludes>
+          </configuration>
+        </plugin>
       </plugins>
     </pluginManagement>
     <plugins>
@@ -135,6 +149,7 @@
         <artifactId>maven-assembly-plugin</artifactId>
         <executions>
           <execution>
+            <id>test-verticle</id>
             <goals>
               <goal>single</goal>
             </goals>
@@ -145,6 +160,24 @@
                 <descriptor>src/test/assembly/verticle-with-main.xml</descriptor>
               </descriptors>
               <finalName>test</finalName>
+            </configuration>
+          </execution>
+          <execution>
+            <id>test-fatjar</id>
+            <goals>
+              <goal>single</goal>
+            </goals>
+            <phase>process-test-classes</phase>
+            <configuration>
+              <descriptors>
+                <descriptor>src/test/assembly/fatjar.xml</descriptor>
+              </descriptors>
+              <finalName>test</finalName>
+              <archive>
+                <manifestEntries>
+                  <Main-Verticle>main</Main-Verticle>
+                </manifestEntries>
+              </archive>
             </configuration>
           </execution>
         </executions>

@@ -40,6 +40,7 @@ public class DeploymentTest {
   private String cachePath;
   private static Buffer verticleWithMain;
   private static Buffer verticle;
+  private static Buffer fatjar;
   private static Buffer verticleSignature;
   private static Buffer validatingKey_asc;
   private static Buffer validatingKey_json;
@@ -51,6 +52,7 @@ public class DeploymentTest {
   public static void init() throws Exception {
     verticle = Buffer.buffer(Files.readAllBytes(new File("src/test/resources/test-verticle.zip").toPath()));
     verticleWithMain = Buffer.buffer(Files.readAllBytes(new File("target/test-verticle-with-main.zip").toPath()));
+    fatjar = Buffer.buffer(Files.readAllBytes(new File("target/test-fatjar.jar").toPath()));
     verticleSignature = Buffer.buffer(Files.readAllBytes(new File("src/test/resources/test-verticle.asc").toPath()));
     validatingKey_asc = Buffer.buffer(Files.readAllBytes(new File("src/test/resources/validating_key.asc").toPath()));
     validatingKey_json = Buffer.buffer(Files.readAllBytes(new File("src/test/resources/validating_key.json").toPath()));
@@ -627,4 +629,38 @@ public class DeploymentTest {
     Thread.sleep(10000);
   }
 */
+
+  @Test
+  public void testDeployFatJar(TestContext context) throws Exception {
+    context.assertTrue(new File("target/test-classes/fatjar/JavaService.class").delete());
+    try {
+      Thread.currentThread().getContextClassLoader().loadClass("fatjar.JavaService");
+      context.fail();
+    } catch (ClassNotFoundException ignore) {
+    }
+    try {
+      Thread.currentThread().getContextClassLoader().loadClass("com.google.common.base.Joiner");
+      context.fail();
+    } catch (ClassNotFoundException ignore) {
+    }
+    vertx = Vertx.vertx();
+    HttpServer server = vertx.createHttpServer().requestHandler(req -> {
+      if (req.path().equals("/test-fatjar.jar")) {
+        req.response().
+            putHeader("Content-Length", "" + fatjar.length()).
+            putHeader("Content-type", "application/octet-stream").
+            write(fatjar).
+            end();
+      } else {
+        req.response().setStatusCode(404).end();
+      }
+    });
+    server.listen(
+        8080,
+        context.asyncAssertSuccess(s -> {
+          vertx.deployVerticle("http://localhost:8080/test-fatjar.jar", context.asyncAssertSuccess());
+        })
+    );
+  }
+
 }

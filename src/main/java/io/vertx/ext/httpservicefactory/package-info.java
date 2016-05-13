@@ -21,7 +21,7 @@
  * documentation.
  *
  * For example, to deploy a service that exists in an hosted at `https://myserver.net/myverticle.zip` called `my-service`
- * you would use the strng `https://myserver.net/myverticle.zip::my-service`.
+ * you would use the string `https://myserver.net/myverticle.zip::my-service`.
  *
  * Given this string, the verticle factory will use the Vert.x http client try and download the resource
  * `https://myserver.net/myverticle.zip`.
@@ -62,6 +62,16 @@
  * ----
  * vertx run https://myserver.net/myverticle.zip
  * ----
+ *
+ * == Deploying a Java service packaged as a fatjar
+ *
+ * The deployer factory can also deploy a Java service packaged as a fatjar, i.e a jar that contains a Java service and all the classes needed
+ * to run, for example:
+ *
+ * - the jar manifest contains the `Main-Verticle:myservice.json`
+ * - `myservice.json` declares the service via `main:my.Verticle`
+ * - the class `my.Verticle`
+ * - all the classes needed by the verticle to run, for example Google Guava jar, etc...
  *
  * == Http client configuration
  *
