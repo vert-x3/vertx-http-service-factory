@@ -27,13 +27,13 @@
   </parent>
 
   <artifactId>vertx-http-service-factory</artifactId>
-  <version>3.3.0</version>
+  <version>3.3.1-SNAPSHOT</version>
 
   <name>Vert.x Http Service Factory</name>
 
   <properties>
     <asciidoc.dir>${project.basedir}/src/main/asciidoc</asciidoc.dir>
-    <stack.version>3.3.0</stack.version>
+    <stack.version>3.3.1-SNAPSHOT</stack.version>
   </properties>
 
   <dependencyManagement>
