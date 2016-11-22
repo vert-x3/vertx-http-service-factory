@@ -12,8 +12,5 @@ Supports basic auth, client configuration (for ssl, etc...), proxy server suppor
 
 ## Documentation
 
-Follow this link:https://github.com/vert-x3/vertx-http-service-factory/blob/master/src/main/asciidoc/index.adoc[link].
+Follow this link:http://vertx.io/docs/vertx-http-service-factory/java/[link].
 
-== Todo
-
-- support keyID while list
