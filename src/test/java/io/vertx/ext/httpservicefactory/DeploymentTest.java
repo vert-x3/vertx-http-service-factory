@@ -12,7 +12,6 @@ import io.vertx.core.net.JksOptions;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
-import org.eclipse.jetty.client.api.Response;
 import org.eclipse.jetty.proxy.ProxyServlet;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.servlet.ServletHandler;
@@ -35,10 +34,8 @@ import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
-import java.util.Enumeration;
 import java.util.List;
 
 /**
@@ -290,9 +287,9 @@ public class DeploymentTest {
     ServletHolder holder = new ServletHolder(new ProxyServlet() {
       @Override
       protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        Enumeration<String> e = request.getHeaderNames();
         proxiedRequests.add(new JsonObject()
           .put("method", request.getMethod())
+          .put("host", request.getHeader("Host"))
           .put("requestUri", request.getRequestURL().toString()));
         super.service(request, response);
       }
@@ -310,6 +307,7 @@ public class DeploymentTest {
           vertx.deployVerticle("http://localhost:8080/the_verticle.zip", context.asyncAssertSuccess(id -> {
             context.assertEquals(Collections.singletonList(new JsonObject()
               .put("method", "GET")
+              .put("host", "localhost:8080")
               .put("requestUri", "http://localhost:8080/the_verticle.zip")), proxiedRequests);
           }));
         })

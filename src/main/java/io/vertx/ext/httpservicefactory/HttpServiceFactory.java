@@ -8,6 +8,8 @@ import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.json.JsonObject;
+import io.vertx.core.net.ProxyOptions;
+import io.vertx.core.net.ProxyType;
 import io.vertx.service.ServiceVerticleFactory;
 import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPSignature;
@@ -47,8 +49,6 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
   private File cacheDir;
   private String username;
   private String password;
-  private String proxyHost;
-  private int proxyPort;
   private String keyserverURITemplate;
   private ValidationPolicy validationPolicy;
   private HttpClientOptions options;
@@ -56,31 +56,38 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
   @Override
   public void init(Vertx vertx) {
     cacheDir = new File(System.getProperty(CACHE_DIR_PROPERTY, FILE_CACHE_DIR));
-    options = configOptions();
     validationPolicy = ValidationPolicy.valueOf(System.getProperty(VALIDATION_POLICY, ValidationPolicy.VERIFY.toString()).toUpperCase());
     username = System.getProperty(AUTH_USERNAME_PROPERTY);
     password = System.getProperty(AUTH_PASSWORD_PROPERTY);
-    proxyHost = System.getProperty(PROXY_HOST_PROPERTY);
-    proxyPort = Integer.parseInt(System.getProperty(PROXY_PORT_PROPERTY, "-1"));
+    options = configOptions();
     keyserverURITemplate = System.getProperty(KEYSERVER_URI_TEMPLATE, "http://pool.sks-keyservers.net:11371/pks/lookup?op=get&options=mr&search=0x%016X");
     this.vertx = vertx;
   }
 
   protected HttpClientOptions createHttpClientOptions(String scheme) {
+    HttpClientOptions options;
     if ("https".equals(scheme)) {
       String optionsJson = System.getProperty(HTTPS_CLIENT_OPTIONS_PROPERTY);
-      HttpClientOptions options;
       if (optionsJson != null) {
         options = new HttpClientOptions(new JsonObject(optionsJson));
       } else {
         options = createHttpClientOptions("http").setTrustAll(true);
       }
       options.setSsl(true);
-      return options;
     } else {
       String optionsJson = System.getProperty(HTTP_CLIENT_OPTIONS_PROPERTY);
-      return optionsJson != null ? new HttpClientOptions(new JsonObject(optionsJson)) : new HttpClientOptions();
+      options = optionsJson != null ? new HttpClientOptions(new JsonObject(optionsJson)) : new HttpClientOptions();
     }
+    String proxyHost = System.getProperty(PROXY_HOST_PROPERTY);
+    int proxyPort = Integer.parseInt(System.getProperty(PROXY_PORT_PROPERTY, "-1"));
+    if (proxyHost != null) {
+      ProxyOptions proxyOptions = new ProxyOptions().setHost(proxyHost).setType(ProxyType.HTTP);
+      if (proxyPort > 0) {
+        proxyOptions.setPort(proxyPort);
+      }
+      options.setProxyOptions(proxyOptions);
+    }
+    return options;
   }
 
   protected HttpClientOptions configOptions() {
@@ -234,13 +241,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
         port = 443;
       }
     }
-    HttpClientRequest req;
-    if (proxyHost == null) {
-      req = client.get(port, url.getHost(), requestURI);
-    } else {
-      req = client.get(proxyPort, proxyHost, url.toString());
-      req.putHeader("host", url.getHost());
-    }
+    HttpClientRequest req = client.get(port, url.getHost(), requestURI);
     req.setFollowRedirects(true);
     if (doAuth && username != null && password != null) {
       req.putHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString((username + ":" + password).getBytes()));
