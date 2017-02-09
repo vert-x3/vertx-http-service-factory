@@ -19,8 +19,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
 import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
 import java.util.jar.Attributes;
@@ -161,7 +159,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
             }
           };
 
-          doRequest(keyserverClient, publicKeyFile, publicKeyURI, null, null, false, unmarshallerFactory, new HashSet<>(), ar2 -> {
+          doRequest(keyserverClient, publicKeyFile, publicKeyURI, null, null, false, unmarshallerFactory, ar2 -> {
             if (ar2.succeeded()) {
               try {
                 long keyID = signature.getKeyID();
@@ -202,27 +200,24 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
    * function for a given media type value. The returned function unmarshaller function will be called with the buffers
    * to unmarshall and finally with a null buffer to signal the end of the unmarshalled data. It can return a buffer
    * or a null value.
-   *
-   * @param client       the http client
+   *  @param client       the http client
    * @param file         the file where to save the content
    * @param url          the resource url
    * @param username     the optional username used for basic auth
    * @param password     the optional password used for basic auth
    * @param doAuth       whether to perform authentication or not
    * @param unmarshaller the unmarshaller
-   * @param history      the previous urls for detecting redirection loops
    * @param handler      the result handler
    */
   private void doRequest(
-      HttpClient client,
-      File file,
-      URI url,
-      String username,
-      String password,
-      boolean doAuth,
-      BiFunction<String, Buffer, Buffer> unmarshaller,
-      Set<URI> history,
-      Handler<AsyncResult<File>> handler) {
+    HttpClient client,
+    File file,
+    URI url,
+    String username,
+    String password,
+    boolean doAuth,
+    BiFunction<String, Buffer, Buffer> unmarshaller,
+    Handler<AsyncResult<File>> handler) {
     if (file.exists() && file.isFile()) {
       handler.handle(Future.succeededFuture(file));
       return;
@@ -246,6 +241,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
       req = client.get(proxyPort, proxyHost, url.toString());
       req.putHeader("host", url.getHost());
     }
+    req.setFollowRedirects(true);
     if (doAuth && username != null && password != null) {
       req.putHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString((username + ":" + password).getBytes()));
     }
@@ -299,35 +295,9 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
           });
           break;
         }
-        case 301:
-        case 302:
-        case 303:
-        case 308: {
-          // Redirect
-          String location = resp.headers().get("location");
-          if (location == null) {
-            handler.handle(Future.failedFuture("HTTP redirect with no location header"));
-          } else {
-            URI redirectURI;
-            try {
-              redirectURI = new URI(location);
-            } catch (URISyntaxException e) {
-              handler.handle(Future.failedFuture("Invalid redirect URI: " + location));
-              return;
-            }
-            if (history.contains(redirectURI)) {
-              handler.handle(Future.failedFuture(new Exception("Server redirected to a previous uri " + redirectURI)));
-              return;
-            }
-            Set<URI> nextHistory = new HashSet<>(history);
-            nextHistory.add(url);
-            doRequest(client, file, redirectURI, username, password, doAuth, unmarshaller, nextHistory, handler);
-          }
-          break;
-        }
         case 401: {
           if (prefix().equals("https") && resp.getHeader("WWW-Authenticate") != null && username != null && password != null) {
-            doRequest(client, file, url, username, password, true, unmarshaller, history, handler);
+            doRequest(client, file, url, username, password, true, unmarshaller, handler);
             return;
           }
           handler.handle(Future.failedFuture(new Exception("Unauthorized")));
@@ -355,11 +325,11 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
 
   protected void doRequest(HttpClient client, File file, URI url, File signatureFile,
                            URI signatureURL, Handler<AsyncResult<Result>> handler) {
-    doRequest(client, file, url, username, password, false, (mediatype, buf) -> buf, new HashSet<>(), ar1 -> {
+    doRequest(client, file, url, username, password, false, (mediatype, buf) -> buf, ar1 -> {
       if (ar1.succeeded()) {
         // Now get the signature if any
         if (validationPolicy != ValidationPolicy.NONE) {
-          doRequest(client, signatureFile, signatureURL, username, password, false, (mediatype, buf) -> buf, new HashSet<>(), ar3 -> {
+          doRequest(client, signatureFile, signatureURL, username, password, false, (mediatype, buf) -> buf, ar3 -> {
             if (ar3.succeeded()) {
               handler.handle(Future.succeededFuture(new Result(ar1.result(), ar3.result())));
             } else {
