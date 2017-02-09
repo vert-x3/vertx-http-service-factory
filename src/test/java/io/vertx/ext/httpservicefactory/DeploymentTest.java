@@ -3,12 +3,15 @@ package io.vertx.ext.httpservicefactory;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.net.JksOptions;
+import io.vertx.core.net.ProxyOptions;
+import io.vertx.core.net.ProxyType;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
@@ -279,7 +282,26 @@ public class DeploymentTest {
   }
 
   @Test
-  public void testDeployUsingProxy(TestContext context) throws Exception {
+  public void testDeployUsingProxyWithProxyHostPortProperties(TestContext context) throws Exception {
+    testDeployUsingProxy(context, () -> {
+      System.setProperty(HttpServiceFactory.PROXY_HOST_PROPERTY, "localhost");
+      System.setProperty(HttpServiceFactory.PROXY_PORT_PROPERTY, "8081");
+    });
+  }
+
+  @Test
+  public void testDeployUsingProxyWithOptionsSystemProperties(TestContext context) throws Exception {
+    testDeployUsingProxy(context, () -> {
+      System.setProperty(HttpServiceFactory.HTTP_CLIENT_OPTIONS_PROPERTY, new JsonObject()
+        .put("proxyOptions", new JsonObject()
+          .put("host", "localhost")
+          .put("port", 8081)
+          .put("type", ProxyType.HTTP.name())).encode());
+      System.setProperty(HttpServiceFactory.PROXY_PORT_PROPERTY, "8081");
+    });
+  }
+
+  private void testDeployUsingProxy(TestContext context, Runnable configure) throws Exception {
     proxyServer = new Server(8081);
     ServletHandler handler = new ServletHandler();
     proxyServer.setHandler(handler);
@@ -297,8 +319,7 @@ public class DeploymentTest {
     holder.setInitParameter("maxThreads", "10");
     handler.addServletWithMapping(holder, "/*");
     proxyServer.start();
-    System.setProperty(HttpServiceFactory.PROXY_HOST_PROPERTY, "localhost");
-    System.setProperty(HttpServiceFactory.PROXY_PORT_PROPERTY, "8081");
+    configure.run();
     vertx = Vertx.vertx();
     HttpServer server = new RepoBuilder().setVerticle(verticleWithMain).build();
     server.listen(

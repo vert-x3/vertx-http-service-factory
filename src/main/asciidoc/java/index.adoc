@@ -94,6 +94,20 @@ an https connection.
 The http client can be configured to support a proxy server with the _vertx.httpServiceFactory.proxyHost_ and
 _vertx.httpServiceFactory.proxyPort_ system properties.
 
+If you need more proxy configuration such as support for SOCKS or proxy authentication, you can use specify them
+in the _vertx.httpServiceFactory.httpClientOptions_ instead.
+
+----
+vertx run https://myserver.net/myverticle.zip \
+   -Dvertx.httpServiceFactory.httpClientOptions="{\"proxyOptions\":{ \
+      \"host\":\"proxy-host\", \
+      \"port\":1234 \
+      \"type\":\"SOCKS4\"
+   } }"
+----
+
+Please see read the `link:../../apidocs/io/vertx/core/http/HttpClientOptions.html[HttpClientOptions]` configuration for all the details;
+
 == Public key servers
 
 Signed artifacts signatures are verifed using a public key, public key are retrieved from a public key server.
