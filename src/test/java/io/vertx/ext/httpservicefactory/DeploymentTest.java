@@ -7,26 +7,39 @@ import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
+import io.vertx.core.json.JsonObject;
 import io.vertx.core.net.JksOptions;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
+import org.eclipse.jetty.client.api.Response;
 import org.eclipse.jetty.proxy.ProxyServlet;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.servlet.ServletHandler;
+import org.eclipse.jetty.servlet.ServletHolder;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.List;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
@@ -36,6 +49,10 @@ public class DeploymentTest {
 
   @Rule
   public TestName name = new TestName();
+
+  @Rule
+  public TemporaryFolder testFolder = new TemporaryFolder();
+
   private final String auth = "Basic " + Base64.getEncoder().encodeToString("the_username:the_password".getBytes());
   private String cachePath;
   private static Buffer verticleWithMain;
@@ -60,8 +77,8 @@ public class DeploymentTest {
   }
 
   @Before
-  public void before() {
-    cachePath = "target" + File.separator + "file-cache-" + name.getMethodName();
+  public void before() throws Exception {
+    cachePath = testFolder.newFolder("file-cache-" + name.getMethodName()).getAbsolutePath();
     System.setProperty(HttpServiceFactory.CACHE_DIR_PROPERTY, cachePath);
     System.setProperty(HttpServiceFactory.VALIDATION_POLICY, "" + ValidationPolicy.NONE);
   }
@@ -269,7 +286,19 @@ public class DeploymentTest {
     proxyServer = new Server(8081);
     ServletHandler handler = new ServletHandler();
     proxyServer.setHandler(handler);
-    handler.addServletWithMapping(ProxyServlet.class, "/*").setInitParameter("maxThreads", "10");
+    List<JsonObject> proxiedRequests = Collections.synchronizedList(new ArrayList<>());
+    ServletHolder holder = new ServletHolder(new ProxyServlet() {
+      @Override
+      protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+        Enumeration<String> e = request.getHeaderNames();
+        proxiedRequests.add(new JsonObject()
+          .put("method", request.getMethod())
+          .put("requestUri", request.getRequestURL().toString()));
+        super.service(request, response);
+      }
+    });
+    holder.setInitParameter("maxThreads", "10");
+    handler.addServletWithMapping(holder, "/*");
     proxyServer.start();
     System.setProperty(HttpServiceFactory.PROXY_HOST_PROPERTY, "localhost");
     System.setProperty(HttpServiceFactory.PROXY_PORT_PROPERTY, "8081");
@@ -278,7 +307,11 @@ public class DeploymentTest {
     server.listen(
         8080,
         context.asyncAssertSuccess(s -> {
-          vertx.deployVerticle("http://localhost:8080/the_verticle.zip", context.asyncAssertSuccess());
+          vertx.deployVerticle("http://localhost:8080/the_verticle.zip", context.asyncAssertSuccess(id -> {
+            context.assertEquals(Collections.singletonList(new JsonObject()
+              .put("method", "GET")
+              .put("requestUri", "http://localhost:8080/the_verticle.zip")), proxiedRequests);
+          }));
         })
     );
   }
