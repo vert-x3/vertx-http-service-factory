@@ -1,11 +1,9 @@
 = Vert.x Http Service Factory
 
-The http service factory is a Vert.x service factory for deploying services from an http server.
-
-It it an alternative
+The http service factory is a Vert.x service factory for deploying services from an http server. It it an alternative
 to the Maven Service Factory for using services hosted on a plain http server, e.g a JavaScript service zipped
 and hosted somewhere. Unlike the Maven Service Factory, the Http Service Factory does not provide any kind of
-classpath dependency resolution. To use this feature be sure that `io.vertx:vertx-http-service-factory:3.5.1` is in your classpath.
+classpath dependency resolution. To use this feature be sure that `${maven.groupId}:${maven.artifactId}:${maven.version}` is in your classpath.
 
 ----
 vertx run https://myserver.net/myverticle.zip::my-service
@@ -106,7 +104,7 @@ vertx run https://myserver.net/myverticle.zip \
    } }"
 ----
 
-Please see read the `link:../../apidocs/io/vertx/core/http/HttpClientOptions.html[HttpClientOptions]` configuration for all the details;
+Please see read the {@link io.vertx.core.http.HttpClientOptions} configuration for all the details;
 
 == Public key servers
 
@@ -136,7 +134,7 @@ system property configures the behavior of the verticle factory when it attemps 
 not verified. If the signature cannot be verified, the deployment fails.
 - _mandatory_: the service file must have a corresponding _.asc_ signature file and the signature must be verified.
 
-The default validation policy is *_verify_*.
+The default validation policy is_verify_*.
 
 == Cache directory
 
@@ -195,6 +193,6 @@ We can run this service with:
 
 ----
 vertx run https://bintray.com/artifact/download/vietj/testgenrepo/helloworld.zip::helloworld
-% Hello World
+ % Hello World
 Succeeded in deploying verticle
 ----
