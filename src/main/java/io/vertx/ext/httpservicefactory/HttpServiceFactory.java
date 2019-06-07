@@ -101,7 +101,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
   }
 
   @Override
-  public void resolve(String identifier, DeploymentOptions deploymentOptions, ClassLoader classLoader, Future<String> resolution) {
+  public void resolve(String identifier, DeploymentOptions deploymentOptions, ClassLoader classLoader, Promise<String> resolution) {
 
     int pos = identifier.lastIndexOf("::");
     String serviceName;
@@ -352,7 +352,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
     });
   }
 
-  private void deploy(File file, String identifier, String serviceName, DeploymentOptions deploymentOptions, ClassLoader classLoader, Future<String> resolution) {
+  private void deploy(File file, String identifier, String serviceName, DeploymentOptions deploymentOptions, ClassLoader classLoader, Promise<String> resolution) {
     try {
       String serviceIdentifer = null;
       if (serviceName == null) {
