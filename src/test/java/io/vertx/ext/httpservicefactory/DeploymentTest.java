@@ -480,8 +480,7 @@ public class DeploymentTest {
                 setStatusCode(200).
                 putHeader("Content-Length", "" + validatingKey_json.length()).
                 putHeader("Content-type", "application/json").
-                write(validatingKey_json).
-                end();
+                end(validatingKey_json);
           } else {
             req.response().setStatusCode(404).end();
           }
@@ -597,15 +596,13 @@ public class DeploymentTest {
           req.response().
               putHeader("Content-Length", "" + verticle.length()).
               putHeader("Content-type", "application/octet-stream").
-              write(verticle).
-              end();
+              end(verticle);
           return;
         } else if (req.path().equals("/the_verticle.zip.asc") && signature != null) {
           req.response().
               putHeader("Content-Length", "" + signature.length()).
               putHeader("Content-type", "application/octet-stream").
-              write(signature).
-              end();
+              end(signature);
           return;
         }
         req.response().setStatusCode(404).end();
@@ -624,7 +621,7 @@ public class DeploymentTest {
           "get".equals(req.getParam("op")) &&
           "mr".equals(req.getParam("options")) &&
           "0x9F9358A769793D09".equals(req.getParam("search"))) {
-        req.response().putHeader("Content-Type", "application/pgp-keys; charset=UTF-8").setChunked(true).setStatusCode(200).write(key).end();
+        req.response().putHeader("Content-Type", "application/pgp-keys; charset=UTF-8").setChunked(true).setStatusCode(200).end(key);
       } else {
         req.response().setStatusCode(404).end();
       }
@@ -701,8 +698,7 @@ public class DeploymentTest {
         req.response().
             putHeader("Content-Length", "" + fatjar.length()).
             putHeader("Content-type", "application/octet-stream").
-            write(fatjar).
-            end();
+            end(fatjar);
       } else {
         req.response().setStatusCode(404).end();
       }
