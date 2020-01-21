@@ -8,6 +8,7 @@ import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpClientResponse;
+import io.vertx.core.http.RequestOptions;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.net.ProxyOptions;
 import io.vertx.core.net.ProxyType;
@@ -242,7 +243,16 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
         port = 443;
       }
     }
-    HttpClientRequest req = client.get(port, url.getHost(), requestURI, ar -> {
+    RequestOptions options = new RequestOptions()
+      .setPort(port)
+      .setHost(url.getHost())
+      .setURI(requestURI)
+      .setFollowRedirects(true)
+      .addHeader("user-agent", "Vert.x Http Service Factory");
+    if (doAuth && username != null && password != null) {
+      options.addHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString((username + ":" + password).getBytes()));
+    }
+    client.get(options, ar -> {
       if (ar.succeeded()) {
         HttpClientResponse resp = ar.result();
         int status = resp.statusCode();
@@ -307,12 +317,6 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
         handler.handle(Future.failedFuture(ar.cause()));
       }
     });
-    req.setFollowRedirects(true);
-    if (doAuth && username != null && password != null) {
-      req.putHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString((username + ":" + password).getBytes()));
-    }
-    req.putHeader("user-agent", "Vert.x Http Service Factory");
-    req.end();
   }
 
   private static class Result {
