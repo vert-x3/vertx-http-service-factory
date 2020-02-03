@@ -6,7 +6,6 @@ import io.vertx.core.file.AsyncFile;
 import io.vertx.core.file.OpenOptions;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
-import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpClientResponse;
 import io.vertx.core.http.RequestOptions;
 import io.vertx.core.json.JsonObject;
@@ -23,6 +22,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
 import java.util.jar.Attributes;
@@ -102,17 +102,19 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
   }
 
   @Override
-  public void resolve(String identifier, DeploymentOptions deploymentOptions, ClassLoader classLoader, Promise<String> resolution) {
+  protected void createVerticle(String verticleName, DeploymentOptions deploymentOptions, ClassLoader classLoader, Promise<Callable<Verticle>> promise) {
 
-    int pos = identifier.lastIndexOf("::");
+
+
+    int pos = verticleName.lastIndexOf("::");
     String serviceName;
     String stringURL;
     if (pos != -1) {
-      stringURL = identifier.substring(0, pos);
-      serviceName = identifier.substring(pos + 2);
+      stringURL = verticleName.substring(0, pos);
+      serviceName = verticleName.substring(pos + 2);
     } else {
       serviceName = null;
-      stringURL = identifier;
+      stringURL = verticleName;
     }
 
     URI url;
@@ -125,7 +127,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
       deploymentKey = URLEncoder.encode(url.toString(), "UTF-8");
       signatureKey = URLEncoder.encode(signatureURL.toString(), "UTF-8");
     } catch (Exception e) {
-      resolution.fail(e);
+      promise.fail(e);
       return;
     }
     File deploymentFile = new File(cacheDir, deploymentKey);
@@ -146,7 +148,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
             publicKeyFile = new File(cacheDir, URLEncoder.encode(publicKeyURI.toString(), "UTF-8"));
           } catch (Exception e) {
             closeQuietly(client);
-            resolution.fail(e);
+            promise.fail(e);
             return;
           }
           HttpClient keyserverClient;
@@ -179,27 +181,27 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
                   FileInputStream f = new FileInputStream(ar.result().deployment);
                   boolean verified = PGPHelper.verifySignature(f, new FileInputStream(ar.result().signature), publicKey);
                   if (verified) {
-                    deploy(deploymentFile, identifier, serviceName, deploymentOptions, classLoader, resolution);
+                    deploy(deploymentFile, verticleName, serviceName, deploymentOptions, classLoader, promise);
                     return;
                   }
                 }
-                resolution.fail(new Exception("Signature verification failed"));
+                promise.fail(new Exception("Signature verification failed"));
               } catch (Exception e) {
-                resolution.fail(e);
+                promise.fail(e);
               } finally {
                 closeQuietly(keyserverClient);
               }
             } else {
               closeQuietly(keyserverClient);
-              resolution.fail(ar2.cause());
+              promise.fail(ar2.cause());
             }
           });
         } else {
           closeQuietly(client);
-          deploy(deploymentFile, identifier, serviceName, deploymentOptions, classLoader, resolution);
+          deploy(deploymentFile, verticleName, serviceName, deploymentOptions, classLoader, promise);
         }
       } else {
-        resolution.fail(ar.cause());
+        promise.fail(ar.cause());
       }
     });
   }
@@ -356,7 +358,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
     });
   }
 
-  private void deploy(File file, String identifier, String serviceName, DeploymentOptions deploymentOptions, ClassLoader classLoader, Promise<String> resolution) {
+  private void deploy(File file, String identifier, String serviceName, DeploymentOptions deploymentOptions, ClassLoader classLoader, Promise<Callable<Verticle>> resolution) {
     try {
       String serviceIdentifer = null;
       if (serviceName == null) {
@@ -374,7 +376,7 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
       deploymentOptions.setExtraClasspath(Collections.singletonList(file.getAbsolutePath()));
       deploymentOptions.setIsolationGroup("__vertx_maven_" + file.getName());
       URLClassLoader urlc = new URLClassLoader(new URL[]{file.toURI().toURL()}, classLoader);
-      super.resolve(serviceIdentifer, deploymentOptions, urlc, resolution);
+      super.createVerticle(serviceIdentifer, deploymentOptions, urlc, resolution);
     } catch (Exception e) {
       resolution.fail(e);
     }
