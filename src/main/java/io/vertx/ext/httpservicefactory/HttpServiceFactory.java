@@ -6,6 +6,7 @@ import io.vertx.core.file.AsyncFile;
 import io.vertx.core.file.OpenOptions;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
+import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpClientResponse;
 import io.vertx.core.http.RequestOptions;
 import io.vertx.core.json.JsonObject;
@@ -254,69 +255,76 @@ public class HttpServiceFactory extends ServiceVerticleFactory {
     if (doAuth && username != null && password != null) {
       options.addHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString((username + ":" + password).getBytes()));
     }
-    client.get(options, ar -> {
-      if (ar.succeeded()) {
-        HttpClientResponse resp = ar.result();
-        int status = resp.statusCode();
-        switch (resp.statusCode()) {
-          case 200: {
-            String contentType = resp.getHeader("Content-Type");
-            int index = contentType.indexOf(";");
-            String mediaType = index > -1 ? contentType.substring(0, index) : contentType;
-            AtomicBoolean done = new AtomicBoolean();
-            resp.exceptionHandler(err -> {
-              if (done.compareAndSet(false, true)) {
-                handler.handle(Future.failedFuture(err));
-              }
-            });
-            resp.bodyHandler(body -> {
-              if (!done.compareAndSet(false, true)) {
-                return;
-              }
-              File parentFile = file.getParentFile();
-              if (!parentFile.exists()) {
-                parentFile.mkdirs(); // Handle that
-              }
-              Buffer data;
-              try {
-                data = unmarshaller.apply(mediaType, body);
-              } catch (Exception e) {
-                handler.handle(Future.failedFuture(e));
-                return;
-              }
-              vertx.fileSystem().open(file.getPath(), new OpenOptions().setCreate(true), ar2 -> {
-                if (ar2.succeeded()) {
-                  AsyncFile result = ar2.result();
-                  result.write(data);
-                  result.close(v2 -> {
-                    if (v2.succeeded()) {
-                      handler.handle(Future.succeededFuture(file));
+    client.request(options, ar1 -> {
+      if (ar1.succeeded()) {
+        HttpClientRequest req = ar1.result();
+        req.send(ar2 -> {
+          if (ar2.succeeded()) {
+            HttpClientResponse resp = ar2.result();
+            int status = resp.statusCode();
+            switch (resp.statusCode()) {
+              case 200: {
+                String contentType = resp.getHeader("Content-Type");
+                int index = contentType.indexOf(";");
+                String mediaType = index > -1 ? contentType.substring(0, index) : contentType;
+                AtomicBoolean done = new AtomicBoolean();
+                resp.exceptionHandler(err -> {
+                  if (done.compareAndSet(false, true)) {
+                    handler.handle(Future.failedFuture(err));
+                  }
+                });
+                resp.bodyHandler(body -> {
+                  if (!done.compareAndSet(false, true)) {
+                    return;
+                  }
+                  File parentFile = file.getParentFile();
+                  if (!parentFile.exists()) {
+                    parentFile.mkdirs(); // Handle that
+                  }
+                  Buffer data;
+                  try {
+                    data = unmarshaller.apply(mediaType, body);
+                  } catch (Exception e) {
+                    handler.handle(Future.failedFuture(e));
+                    return;
+                  }
+                  vertx.fileSystem().open(file.getPath(), new OpenOptions().setCreate(true), ar3 -> {
+                    if (ar3.succeeded()) {
+                      AsyncFile result = ar3.result();
+                      result.write(data);
+                      result.close(v2 -> {
+                        if (v2.succeeded()) {
+                          handler.handle(Future.succeededFuture(file));
+                        } else {
+                          handler.handle(Future.failedFuture(v2.cause()));
+                        }
+                      });
                     } else {
-                      handler.handle(Future.failedFuture(v2.cause()));
+                      handler.handle(Future.failedFuture(ar3.cause()));
                     }
                   });
-                } else {
-                  handler.handle(Future.failedFuture(ar2.cause()));
+                });
+                break;
+              }
+              case 401: {
+                if (prefix().equals("https") && resp.getHeader("WWW-Authenticate") != null && username != null && password != null) {
+                  doRequest(client, file, url, username, password, true, unmarshaller, handler);
+                  return;
                 }
-              });
-            });
-            break;
-          }
-          case 401: {
-            if (prefix().equals("https") && resp.getHeader("WWW-Authenticate") != null && username != null && password != null) {
-              doRequest(client, file, url, username, password, true, unmarshaller, handler);
-              return;
+                handler.handle(Future.failedFuture(new Exception("Unauthorized")));
+                break;
+              }
+              default: {
+                handler.handle(Future.failedFuture(new Exception("Cannot get file status:" + status)));
+                break;
+              }
             }
-            handler.handle(Future.failedFuture(new Exception("Unauthorized")));
-            break;
+          } else {
+            handler.handle(Future.failedFuture(ar2.cause()));
           }
-          default: {
-            handler.handle(Future.failedFuture(new Exception("Cannot get file status:" + status)));
-            break;
-          }
-        }
+        });
       } else {
-        handler.handle(Future.failedFuture(ar.cause()));
+        handler.handle(Future.failedFuture(ar1.cause()));
       }
     });
   }
