@@ -1,6 +1,6 @@
 == Vertx http service factory
 
-image:https://travis-ci.org/vert-x3/vertx-http-service-factory.svg?branch=master["Build Status",link="https://travis-ci.org/vert-x3/vertx-http-service-factory"]
+image:https://github.com/vert-x3/vertx-http-service-factory/workflows/CI/badge.svg?branch=master["Build Status", link="https://github.com/vert-x3/vertx-http-service-factory/actions?query=workflow%3ACI"]
 
 A service factory that deploys from HTTP servers
 
