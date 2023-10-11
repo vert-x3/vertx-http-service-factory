@@ -24,13 +24,13 @@
   </parent>
 
   <artifactId>vertx-http-service-factory</artifactId>
-  <version>4.4.6</version>
+  <version>4.4.7-SNAPSHOT</version>
 
   <name>Vert.x Http Service Factory</name>
 
   <properties>
     <asciidoc.dir>${project.basedir}/src/main/asciidoc</asciidoc.dir>
-    <stack.version>4.4.6</stack.version>
+    <stack.version>4.4.7-SNAPSHOT</stack.version>
   </properties>
 
   <dependencyManagement>
